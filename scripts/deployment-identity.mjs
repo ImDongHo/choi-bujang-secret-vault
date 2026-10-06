@@ -13,6 +13,15 @@ function originalApiUrl(value) {
   return url.href;
 }
 
+// 3단계부터 배포 설정(aleph.json)에 실제 허용 경로를 적습니다. "메서드 /경로" 형식만 받습니다.
+const ROUTE = /^(GET|POST|PUT|PATCH|DELETE) \/[A-Za-z0-9/_:.\[\]-]{0,200}$/u;
+function allowedRoutes(value) {
+  if (!Array.isArray(value) || !value.length || value.length > 50
+      || value.some(route => typeof route !== 'string' || !ROUTE.test(route))
+      || new Set(value).size !== value.length) return null;
+  return [...value];
+}
+
 export function deploymentIdentity(env, config) {
   const owner = env.VERCEL_GIT_REPO_OWNER;
   const repo = env.VERCEL_GIT_REPO_SLUG;
@@ -39,6 +48,11 @@ export function deploymentIdentity(env, config) {
     judgeIssuer: config.judgeIssuer,
   };
   if (config.step === 1) identity.sampleMarker = config.sampleMarker;
+  if (config.step >= 3) {
+    const routes = allowedRoutes(config.allowedRoutes);
+    if (!routes) throw new Error('3단계부터 aleph.config.json의 allowedRoutes에 "메서드 /경로" 형식의 허용 경로가 필요합니다.');
+    identity.allowedRoutes = routes;
+  }
   if (config.step >= 5) {
     const original = originalApiUrl(config.originalApiUrl);
     if (!original) {

@@ -25,12 +25,14 @@
   - 원본 자료 API `aleph.config.json`의 `originalApiUrl` = `https://uibjvuqvkcgumanohtoi.supabase.co/rest/v1/notes`. `supabase/step5-revoke-direct.sql`로 `public.notes`의 `PUBLIC`·`anon`·`authenticated` 직접 권한을 모두 거뒀습니다(학습 DB에 적용, 2026-10-06). `service_role`(서버 함수)과 다른 테이블은 그대로입니다.
   - 적용 후 확인(`has_table_privilege`): `anon`·`authenticated` SELECT·INSERT·UPDATE·DELETE 모두 false, `service_role` 모두 true. `role_table_grants`에는 `service_role` 줄만 남음. DB 안에서 `authenticated` 역할로 조회하면 `permission denied`.
   - 배포 설정 `/aleph.json`에도 5단계부터 `originalApiUrl`을 함께 적습니다(`scripts/deployment-identity.mjs`, 쿼리·조각·계정 정보 없는 HTTPS 경로만 허용, 없으면 빌드 실패). 심판이 "배포 설정에 원본 자료 HTTPS 주소가 없습니다"로 알려 준 부분을 고친 것입니다.
+  - 배포 설정 `/aleph.json`에 3단계부터 `allowedRoutes`도 함께 적습니다(`"메서드 /경로"` 형식만 허용, 없으면 빌드 실패).
+  - **화면 코드에 Supabase 키가 없습니다.** 로그인도 서버 함수 `POST /api/auth/login`·`/api/auth/refresh`·`/api/auth/logout`(`api/auth/[action].js`)이 서버 환경변수의 키로 Supabase Auth에 대신 요청합니다. 브라우저는 발급된 세션(토큰)을 이 탭의 `sessionStorage`에만 두고 `Authorization: Bearer`로 `/api/notes`를 부릅니다. 토큰이 만료되면 `/api/auth/refresh`로 한 번 갱신합니다. 브라우저 SDK(jsDelivr)와 publishable key는 화면에서 뺐습니다.
   - 4단계 RLS 정책 4개(`auth.uid() = owner_id`)는 그대로 둡니다. 권한이 없으니 쓰이지 않지만, 권한이 실수로 다시 열려도 본인 행만 허용하는 안전장치입니다.
   - 서버 함수의 로그인 검사(`verify-login.mjs`)·소유자 검사·서버 전용 키(Vercel 환경변수)는 바꾸지 않았습니다.
 
 ### 4단계 기능 (유지)
 
-- 지금 작동하는 기능: `/` 화면에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(공식 SDK, Project URL과 publishable key만 화면에 둠). 로그인한 사람은 **자기 메모만** 보고 추가·수정·삭제할 수 있습니다. 다른 사람의 메모 id로 읽기·수정·삭제를 요청하면 없는 메모와 똑같이 `404 NOTE_NOT_FOUND`로 거부됩니다. 로그인하지 않거나 토큰 검사에 실패한 요청은 `401 LOGIN_REQUIRED`로 자료 없이 거부됩니다.
+- 지금 작동하는 기능: `/` 화면에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(5단계부터 서버 함수 `/api/auth/*` 경유, 화면에 키 없음). 로그인한 사람은 **자기 메모만** 보고 추가·수정·삭제할 수 있습니다. 다른 사람의 메모 id로 읽기·수정·삭제를 요청하면 없는 메모와 똑같이 `404 NOTE_NOT_FOUND`로 거부됩니다. 로그인하지 않거나 토큰 검사에 실패한 요청은 `401 LOGIN_REQUIRED`로 자료 없이 거부됩니다.
 - 자료 API(`aleph.config.json`의 `allowedRoutes`):
   - `GET /api/notes` → 로그인 사용자의 메모 배열 `[{id,title,body}]`
   - `POST /api/notes` `{id?,title,body}` → `201 {id}` (`id`는 UUID, 없으면 서버가 만듦. 같은 `id`는 409)
