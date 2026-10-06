@@ -24,6 +24,7 @@
   - 브라우저 코드(`public/index.html`) 점검 결과 Supabase에 메모를 직접 읽거나 고치는 호출은 **없음**이었습니다(`fetch`는 `/api/notes`뿐, Supabase 호출은 로그인용 `auth.*`뿐).
   - 원본 자료 API `aleph.config.json`의 `originalApiUrl` = `https://uibjvuqvkcgumanohtoi.supabase.co/rest/v1/notes`. `supabase/step5-revoke-direct.sql`로 `public.notes`의 `PUBLIC`·`anon`·`authenticated` 직접 권한을 모두 거뒀습니다(학습 DB에 적용, 2026-10-06). `service_role`(서버 함수)과 다른 테이블은 그대로입니다.
   - 적용 후 확인(`has_table_privilege`): `anon`·`authenticated` SELECT·INSERT·UPDATE·DELETE 모두 false, `service_role` 모두 true. `role_table_grants`에는 `service_role` 줄만 남음. DB 안에서 `authenticated` 역할로 조회하면 `permission denied`.
+  - 배포 설정 `/aleph.json`에도 5단계부터 `originalApiUrl`을 함께 적습니다(`scripts/deployment-identity.mjs`, 쿼리·조각·계정 정보 없는 HTTPS 경로만 허용, 없으면 빌드 실패). 심판이 "배포 설정에 원본 자료 HTTPS 주소가 없습니다"로 알려 준 부분을 고친 것입니다.
   - 4단계 RLS 정책 4개(`auth.uid() = owner_id`)는 그대로 둡니다. 권한이 없으니 쓰이지 않지만, 권한이 실수로 다시 열려도 본인 행만 허용하는 안전장치입니다.
   - 서버 함수의 로그인 검사(`verify-login.mjs`)·소유자 검사·서버 전용 키(Vercel 환경변수)는 바꾸지 않았습니다.
 

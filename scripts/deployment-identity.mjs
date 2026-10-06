@@ -3,6 +3,16 @@ const REPO = /^[A-Za-z0-9._-]{1,100}$/u;
 const SHA = /^[a-f0-9]{40}$/iu;
 const HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.vercel\.app$/iu;
 
+// 5단계부터 배포 설정(aleph.json)에 원본 자료 API 주소를 적습니다.
+// 쿼리·조각·계정 정보가 없는 HTTPS 경로만 받으며, 키 같은 비밀값은 넣지 않습니다.
+function originalApiUrl(value) {
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash
+      || value.includes('?') || value.includes('#') || url.pathname === '/') return null;
+  return url.href;
+}
+
 export function deploymentIdentity(env, config) {
   const owner = env.VERCEL_GIT_REPO_OWNER;
   const repo = env.VERCEL_GIT_REPO_SLUG;
@@ -29,5 +39,12 @@ export function deploymentIdentity(env, config) {
     judgeIssuer: config.judgeIssuer,
   };
   if (config.step === 1) identity.sampleMarker = config.sampleMarker;
+  if (config.step >= 5) {
+    const original = originalApiUrl(config.originalApiUrl);
+    if (!original) {
+      throw new Error('5단계부터 aleph.config.json의 originalApiUrl에 쿼리 없는 원본 자료 HTTPS 주소가 필요합니다.');
+    }
+    identity.originalApiUrl = original;
+  }
   return identity;
 }
