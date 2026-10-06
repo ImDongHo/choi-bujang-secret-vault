@@ -20,7 +20,7 @@
 
 ## 현재 상태: 2단계 저장점
 
-- 지금 작동하는 기능: `/` 화면이 `/api/notes` 서버 함수로 학습용 Supabase의 가상 메모 네 건을 읽어 카드로 보여 줍니다. `/data.json`에는 메모가 없고(`notes: []`), `/aleph.json`은 빌드 때 배포 저장소·커밋·주소로 자동 생성됩니다. 모든 응답에 `X-Content-Type-Options: nosniff` 등 보안 헤더가 붙습니다(`vercel.json`).
+- 지금 작동하는 기능: `/` 화면이 `/api/notes` 서버 함수로 학습용 Supabase의 가상 메모 네 건을 읽어 카드로 보여 줍니다. `/data.json`은 파일을 지워 404가 나고, `/aleph.json`은 빌드 때 배포 저장소·커밋·주소로 자동 생성됩니다. 모든 응답에 `X-Content-Type-Options: nosniff` 등 보안 헤더가 붙습니다(`vercel.json`).
 - 빌드: `aleph.config.json`의 `step`이 2 이상이면 `data.json`을 복사하지 않고, 공개 data.json에 메모가 다시 들어가면 빌드를 멈춥니다.
 - 다시 실행하는 방법: GitHub `main`에 푸시하면 Vercel이 자동 배포합니다. 로컬 확인은 `npm run build -- --local`, 테스트는 `npm run test:r5`, 제출 묶음은 `npm run bundle`(커밋 후, `bundle-notes.json` 필요)입니다.
 - 필요한 Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`(서버 전용, Vercel 설정 화면에만 입력).
@@ -28,7 +28,7 @@
 ## 2단계: 자료를 코드 밖으로 옮겼습니다
 
 - 가상 메모 네 건은 학습용 Supabase 테이블 `public.notes`로 옮겼습니다. 테이블은 RLS가 켜져 있고 정책이 없으며, `anon`·`authenticated`에는 읽기 권한이 없습니다. `owner_id uuid` 칸은 3단계 로그인 연결을 위해 미리 두었습니다(외래키 없음).
-- `data.json`과 `public/data.json`에는 메모가 없습니다(`notes: []`). 테이블을 만드는 SQL은 메모 문장이 들어 있어 `*.local.sql`로 Git에서 제외했습니다.
+- `data.json`과 `public/data.json`은 삭제했습니다. `/data.json`은 404이며, 1단계 확인 표시(`sampleMarker`)도 정적 응답에 남기지 않습니다(`aleph.json`에도 2단계부터 넣지 않음). 테이블을 만드는 SQL은 메모 문장이 들어 있어 `*.local.sql`로 Git에서 제외했습니다.
 - 화면(`/`)은 Vercel 서버 함수 `api/notes.js`(`/api/notes`)를 통해 메모를 읽습니다. 함수는 Vercel 환경변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`를 서버에서만 읽고, 키를 응답·로그·브라우저 파일에 넣지 않습니다. 값은 Vercel → Settings → Environment Variables에 학생이 직접 넣습니다.
 
 ### 아직 남은 약점
@@ -49,7 +49,7 @@
 
 | 확인 대상 | 결과 | 비고 |
 |---|---|---|
-| 현재 작업 파일 | 0건 | `data.json`, `public/data.json` 모두 `notes: []` |
+| 현재 작업 파일 | 0건 | `data.json`, `public/data.json` 삭제(이후 수정에서 404로 변경) |
 | 로컬 빌드 결과물 `public/` | 0건 | `npm run build -- --local` 실행 결과 |
 | GitHub 최신 `origin/main` | **8건** (두 파일 × 네 건) | 2단계 변경을 아직 푸시하지 않음. 푸시 뒤 3번을 다시 실행해 0건을 확인하고 이 표를 고칩니다 |
 | 현재 배포 `/data.json` | 미실행 | 지금 배포는 1단계 버전이므로 메모가 보이는 상태. 푸시·재배포 뒤 4번을 실행합니다 |
