@@ -102,11 +102,57 @@ async function stepThreeChecks(app, config) {
   ];
 }
 
+// 4단계: anon(공개) 키로 Supabase Data API를 직접 불러 메모 테이블이 막혔는지 봅니다.
+// publishable key는 화면에도 들어 있는 공개용 값입니다. 서버 전용 키는 쓰지 않습니다.
+const PUBLISHABLE_KEY = 'sb_publishable_3hpwOdynmaXDwv_r5tjF3Q_zcE7WQTg';
+
+async function sendDataApi(config, { method = 'GET', body } = {}) {
+  const endpoint = new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin);
+  endpoint.searchParams.set('select', 'id');
+  if (method === 'GET') endpoint.searchParams.set('limit', '1');
+  const headers = { apikey: PUBLISHABLE_KEY, Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const response = await fetch(endpoint, {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+    redirect: 'error', signal: AbortSignal.timeout(10000),
+  });
+  let rows = null;
+  if (response.ok) {
+    try {
+      const data = await response.json();
+      rows = Array.isArray(data) ? data.length : null;
+    } catch {
+      // 본문이 없으면 행 수를 셀 수 없습니다.
+    }
+  }
+  return `HTTP ${response.status}${rows === null ? '' : `, 행 ${rows}개`}`;
+}
+
+async function stepFourChecks(app, config) {
+  const base = (await stepThreeChecks(app, config)).filter(item => item.attackId !== 'login_a_note_crud');
+  return [
+    ...base,
+    { attackId: 'anon_data_api_note_read', expected: 'anon 키로 Data API /rest/v1/notes 직접 GET은 거부(401·403), 행 없음',
+      observed: await sendDataApi(config) },
+    { attackId: 'anon_data_api_note_insert', expected: 'anon 키로 Data API /rest/v1/notes 직접 POST는 거부(401·403)',
+      observed: await sendDataApi(config, { method: 'POST', body: {
+        owner_id: '00000000-0000-4000-8000-000000000000', title: '자기 점검', content: 'anon 직접 추가 시도',
+      } }) },
+    { attackId: 'login_owner_note_crud', expected: 'A·B 각자 자기 메모 읽기·추가·수정·삭제 성공',
+      observed: '미실행: A·B 비밀번호·토큰을 코드에 넣지 않으므로 화면에서 직접 확인' },
+    { attackId: 'login_b_reads_a_note', expected: 'B 토큰으로 A 메모 GET·PUT·DELETE /api/notes/:id는 404',
+      observed: '미실행: B 토큰이 필요해 화면 개발자 도구로 직접 확인' },
+    { attackId: 'login_owner_change', expected: '수정·추가 본문에 다른 owner_id를 넣으면 403',
+      observed: '미실행: 로그인 토큰이 필요해 직접 확인' },
+  ];
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3].includes(config.step)) {
+  if (![1, 2, 3, 4].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 4) return stepFourChecks(app, config);
   if (config.step === 3) return stepThreeChecks(app, config);
   if (config.step === 2) return stepTwoChecks(app);
   if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');

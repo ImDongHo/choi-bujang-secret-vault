@@ -18,24 +18,35 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 3단계 저장점
+## 현재 상태: 4단계 저장점
 
-- 지금 작동하는 기능: `/` 화면에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(공식 SDK, Project URL과 publishable key만 화면에 둠). 로그인한 사람만 자기 가상 메모 목록을 보고, 메모를 추가·수정·삭제할 수 있습니다. 로그인하지 않거나 토큰 검사에 실패한 요청은 `401 LOGIN_REQUIRED`로 자료 없이 거부됩니다.
+- 지금 작동하는 기능: `/` 화면에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(공식 SDK, Project URL과 publishable key만 화면에 둠). 로그인한 사람은 **자기 메모만** 보고 추가·수정·삭제할 수 있습니다. 다른 사람의 메모 id로 읽기·수정·삭제를 요청하면 없는 메모와 똑같이 `404 NOTE_NOT_FOUND`로 거부됩니다. 로그인하지 않거나 토큰 검사에 실패한 요청은 `401 LOGIN_REQUIRED`로 자료 없이 거부됩니다.
 - 자료 API(`aleph.config.json`의 `allowedRoutes`):
   - `GET /api/notes` → 로그인 사용자의 메모 배열 `[{id,title,body}]`
   - `POST /api/notes` `{id?,title,body}` → `201 {id}` (`id`는 UUID, 없으면 서버가 만듦. 같은 `id`는 409)
-  - `GET /api/notes/:id` → `{id,title,body}`, 없으면 404
-  - `PUT /api/notes/:id` `{title,body}` → 고친 `{id,title,body}`, 없으면 404
-  - `DELETE /api/notes/:id` → 204, 지운 뒤 `GET`은 404
+  - `GET /api/notes/:id` → `{id,title,body}`, 없거나 남의 메모면 404
+  - `PUT /api/notes/:id` `{title,body}` → 고친 `{id,title,body}`, 없거나 남의 메모면 404, 본문에 다른 `owner_id`를 넣으면 403
+  - `DELETE /api/notes/:id` → 204(본인 메모만), 지운 뒤 `GET`은 404
+  - `POST` 본문에 다른 `owner_id`를 넣으면 403, 저장되는 소유자는 언제나 검증된 사용자 ID
 - 로그인 검사: 모든 자료 API가 시작 틀의 `src/verify-login.mjs`(수정하지 않음)로 `Authorization: Bearer` 토큰을 검사하고, 검사기가 돌려준 사용자 ID만 씁니다. 브라우저가 보낸 `userId`·`role`·`owner_id`는 읽지 않으며, 추가할 때 `owner_id`는 서버가 확인한 사용자 ID로 저장합니다. 발급자 정보는 `aleph.config.json`의 `identityProvider`(issuer·audience·jwksUrl, 비밀 키 없음)에 적었습니다.
+- 소유자 검사(4단계, API): `api/notes/[id].js`는 DB 조회·수정·삭제 조건에 항상 `owner_id = 검증된 사용자 ID`를 붙입니다. 수정은 기존 행(조건)과 새 행(본문에 다른 소유자 금지, 결과 행 소유자 재확인) 모두 본인인지 봅니다. URL·본문의 `owner_id`는 믿지 않습니다.
+- DB 권한(4단계, 두 번째 방어선): `supabase/step4-notes-rls.sql`을 학습 DB에 적용했습니다. `public.notes`에서 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수한 뒤 `authenticated`에만 SELECT·INSERT·UPDATE·DELETE를 주고, 네 동작 모두 `auth.uid() = owner_id`인 행만 허용하는 RLS 정책을 걸었습니다. 앱 API는 `service_role`로 DB를 부르므로 RLS를 건너뛰고, 앱의 A/B 구분은 위 API 검사가 맡습니다.
+  - 적용 후 확인(2026-10-06, `has_table_privilege`): `anon` 7개 권한 모두 false, `authenticated`는 SELECT·INSERT·UPDATE·DELETE만 true(TRUNCATE·REFERENCES·TRIGGER false), 정책 4개.
+  - DB 안에서 B 역할을 흉내 낸 시험(되돌림): B는 자기 행 1개만 보임, A 행 수정 0건, A 소유로 추가·소유자를 A로 바꾸는 수정은 RLS 위반으로 거부, 자기 행 추가·수정은 허용. `anon` 조회는 `permission denied`.
+- 시험 자료(4단계 만들기 1): 기존 가상 메모 4건은 A, 공개 가능한 시험 메모 1건(`b0000000-0000-4000-8000-000000000001`)은 B 소유입니다(`supabase/step4-owner-seed.sql`).
 - 파일: `api/notes/index.js`(목록·추가), `api/notes/[id].js`(한 건 읽기·수정·삭제), `src/notes-api.mjs`(두 함수가 함께 쓰는 로그인 검사 호출·DB 요청), `supabase/step3-notes-crud.sql`(메모에 UUID `id`를 두고 `service_role`에만 쓰기 권한, 메모 문장 없음, 학습용 DB에 적용함). 옛 bigint `id`는 지우지 않고 `legacy_id`로 이름만 바꿔 내부 기본 키로 남겼으며 API에는 나오지 않습니다.
 - 다시 실행하는 방법: GitHub `main`에 푸시하면 Vercel이 자동 배포합니다. 로컬 확인은 `npm run build -- --local`, 테스트는 `npm run test:r5`, 제출 묶음은 `npm run bundle`(커밋 후, `bundle-notes.json` 필요)입니다.
-- 필요한 Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`(서버 전용, Vercel 설정 화면에만 입력). 3단계에서 새로 넣을 값은 없습니다.
+- 필요한 Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`(서버 전용, Vercel 설정 화면에만 입력). 3·4단계에서 새로 넣을 값은 없습니다.
 - 시험용 계정: Supabase → Authentication → Users에서 가상 이메일로 만들고 **Auto Confirm User**를 켭니다. 비밀번호는 코드·README·Git에 적지 않습니다.
 
-### 3단계에서 남은 약점 (4단계에서 고침)
+### 3단계 당시 남은 약점 (4단계에서 막음)
 
-- **소유자 검사가 없습니다.** 목록은 내 메모만 보여 주지만, `GET·PUT·DELETE /api/notes/:id`는 로그인만 확인하고 `owner_id`를 비교하지 않습니다. 따라서 로그인한 B가 A의 메모 `id`를 알면 읽고·고치고·지울 수 있습니다. B의 타인 메모 접근 결과는 4단계에서 기록합니다.
+- **소유자 검사가 없었습니다.** 목록은 내 메모만 보여 주지만, `GET·PUT·DELETE /api/notes/:id`는 로그인만 확인하고 `owner_id`를 비교하지 않습니다. 따라서 로그인한 B가 A의 메모 `id`를 알면 읽고·고치고·지울 수 있습니다. 4단계에서 API와 DB 양쪽에 소유자 검사를 붙였습니다.
+
+### 4단계 자기 점검 기록
+
+- `src/attack-check.mjs`(학생 자기 점검, 심판 판정 아님): 무로그인·가짜 토큰으로 자료 API 5개 경로, anon 키로 Data API 직접 GET·POST를 실제로 보내 결과를 적습니다. A·B 토큰이 필요한 점검(자기 메모 CRUD, B→A 접근, 소유자 변경)은 비밀번호·토큰을 코드에 넣지 않으므로 **미실행**으로 남기고 화면에서 직접 확인합니다.
+- 로컬에서 가짜 DB와 가짜 A·B 토큰으로 시험한 결과: B→A·A→B 메모 GET·PUT·DELETE 모두 404(DB 그대로), 본문 `owner_id`·`userId` 위조 403, 자기 메모 CRUD 정상, 무로그인 401. 실제 배포에서의 결과는 학생이 확인합니다.
 
 ## 2단계: 자료를 코드 밖으로 옮겼습니다
 
@@ -57,13 +68,13 @@
 4. **현재 배포 파일**: 시크릿 창에서 `<배포주소>/data.json`을 열어 `"notes": []`(또는 404)인지, `<배포주소>/`의 페이지 소스(Ctrl+U)에 메모 문장이 없는지 봅니다. 명령으로는 `curl -s <배포주소>/data.json | grep -c '실습용 가[상]'` → 0이어야 합니다.
 5. **자료 API**: `curl -i <배포주소>/api/notes` → 3단계부터는 `401`과 `{"error":"LOGIN_REQUIRED"}`만 나오고 메모가 없어야 합니다. (2단계 배포에서는 로그인 없이 메모 네 건이 나왔습니다.)
 
-### 검색 결과 기록 (2026-10-06, 3단계 작업 중 갱신)
+### 검색 결과 기록 (2026-10-06, 4단계 작업 중 갱신)
 
 | 확인 대상 | 결과 | 비고 |
 |---|---|---|
 | 현재 작업 파일 | 0건 | `data.json`, `public/data.json` 삭제(이후 수정에서 404로 변경) |
 | 로컬 빌드 결과물 `public/` | 0건 | `npm run build -- --local` 실행 결과 |
-| GitHub 최신 `origin/main` | 0건 | 3단계 작업 중 다시 실행(`origin/main` = `d3a5f69`). 2단계 작업 중에는 푸시 전이라 8건이었음 |
+| GitHub 최신 `origin/main` | 0건 | 4단계 작업 중 다시 실행(`origin/main` = `db497ed`). 2단계 작업 중에는 푸시 전이라 8건이었음 |
 | 현재 배포 `/data.json` | 미실행 | 코딩 도구 환경에서는 vercel.app 접속이 막혀 실행하지 못함. 학생이 4번을 직접 실행합니다 |
 | 자료 API `/api/notes` | 미실행 | 3단계 배포 뒤 5번을 실행합니다. 401이 아니라 메모가 나오면 로그인 검사가 배포되지 않은 것입니다 |
 

@@ -1,9 +1,10 @@
 // /api/notes — 로그인한 사용자의 메모 목록(GET)과 새 메모 추가(POST).
 // 2단계: 메모는 학습용 Supabase 테이블에서 서버 쪽으로만 읽습니다(서버 전용 키는 환경변수에만).
 // 3단계: src/verify-login.mjs가 확인한 사용자 ID로만 목록을 고르고 owner_id를 저장합니다.
-// 브라우저가 보낸 owner_id·userId·role은 쓰지 않습니다.
+// 4단계: 본문에 다른 사람을 소유자로 적은 추가 요청은 403으로 거부합니다.
+// 브라우저가 보낸 owner_id·userId·role은 소유자로 쓰지 않습니다.
 import { randomUUID } from 'node:crypto';
-import { isUuid, notesTable, readNoteInput, requireLogin, toNote, unavailable } from '../../src/notes-api.mjs';
+import { claimsOtherOwner, isUuid, notesTable, readNoteInput, requireLogin, toNote, unavailable } from '../../src/notes-api.mjs';
 
 export default async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'POST']);
@@ -20,6 +21,7 @@ export default async function handler(request, response) {
 
     const note = readNoteInput(request);
     if (!note) return response.status(400).json({ error: 'INVALID_NOTE' });
+    if (claimsOtherOwner(note.input, ctx.userId)) return response.status(403).json({ error: 'OWNER_MISMATCH' });
     const { id: requestedId } = note.input;
     if (requestedId !== undefined && requestedId !== null && !isUuid(requestedId)) {
       return response.status(400).json({ error: 'INVALID_ID' });

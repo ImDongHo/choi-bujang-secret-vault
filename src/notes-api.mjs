@@ -2,7 +2,7 @@
 // 로그인 검사는 시작 틀의 src/verify-login.mjs를 그대로 부르고, 결과의 userId만 믿습니다.
 // 브라우저가 보낸 userId·role·owner_id는 읽지 않습니다.
 // SUPABASE_URL, SUPABASE_SECRET_KEY는 Vercel 환경변수에서만 읽고 응답·로그에 넣지 않습니다.
-// 남은 약점: 소유자 검사가 없어 로그인한 B가 A의 메모 id로 읽기·수정·삭제할 수 있습니다(4단계에서 막음).
+// 4단계: 모든 읽기·추가·수정·삭제를 검증된 사용자 ID와 DB의 owner_id가 같을 때만 허용합니다.
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from './verify-login.mjs';
 
@@ -61,6 +61,13 @@ export function readNoteInput(request) {
   const cleanTitle = title.trim();
   if (!cleanTitle || cleanTitle.length > 200 || body.length > 5000) return null;
   return { input, title: cleanTitle, body };
+}
+
+// 본문에 다른 사람을 소유자로 적었는지 봅니다. 소유자는 언제나 검증된 사용자 ID입니다.
+const OWNER_FIELDS = ['owner_id', 'ownerId', 'owner', 'user_id', 'userId'];
+export function claimsOtherOwner(input, userId) {
+  return OWNER_FIELDS.some(field => Object.hasOwn(input, field)
+    && String(input[field]).toLowerCase() !== userId.toLowerCase());
 }
 
 // Supabase REST(PostgREST)를 서버 전용 키로 부릅니다.
