@@ -107,7 +107,9 @@ async function stepThreeChecks(app, config) {
 const PUBLISHABLE_KEY = 'sb_publishable_3hpwOdynmaXDwv_r5tjF3Q_zcE7WQTg';
 
 async function sendDataApi(config, { method = 'GET', body } = {}) {
-  const endpoint = new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin);
+  // 5단계부터는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)을 그대로 씁니다.
+  const endpoint = new URL(config.originalApiUrl
+    ?? new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin).href);
   endpoint.searchParams.set('select', 'id');
   if (method === 'GET') endpoint.searchParams.set('limit', '1');
   const headers = { apikey: PUBLISHABLE_KEY, Accept: 'application/json' };
@@ -147,11 +149,29 @@ async function stepFourChecks(app, config) {
   ];
 }
 
+// 5단계: 메모 자료는 서버 함수로만 다룹니다. 원본(originalApiUrl)에 anon 키로 직접 보낸 요청이 거부되는지 봅니다.
+async function stepFiveChecks(app, config) {
+  const checks = await stepFourChecks(app, config);
+  return checks.map(item => {
+    if (item.attackId === 'anon_data_api_note_read') {
+      return { ...item, expected: 'anon 키로 원본 originalApiUrl 직접 GET은 거부(401·403), 행 없음' };
+    }
+    if (item.attackId === 'anon_data_api_note_insert') {
+      return { ...item, expected: 'anon 키로 원본 originalApiUrl 직접 POST는 거부(401·403)' };
+    }
+    return item;
+  }).concat([
+    { attackId: 'login_direct_original_api', expected: '로그인 토큰으로 원본 직접 요청도 권한 없음(401·403), 서버 함수로만 자료 접근',
+      observed: '미실행: 로그인 토큰이 필요해 직접 확인' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4].includes(config.step)) {
+  if (![1, 2, 3, 4, 5].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 5) return stepFiveChecks(app, config);
   if (config.step === 4) return stepFourChecks(app, config);
   if (config.step === 3) return stepThreeChecks(app, config);
   if (config.step === 2) return stepTwoChecks(app);
