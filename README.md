@@ -71,6 +71,15 @@
 - 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
 - 수정(심판 `X01_CLEAR_NOT_BLOCKED`, 커밋 `c25583f`): 판정자처럼 실행기·경보·`decide.mjs`만 따로 두고 돌리면 `decide.mjs`가 `read-alerts.mjs`·`patterns.json`을 찾지 못해 실행이 멈췄습니다. `decide.mjs`가 다른 파일을 import하거나 읽지 않도록 패턴 값(`patterns.json`과 같은 값)과 항목 추출을 파일 안에 넣었습니다. 격리 실행 결과도 block 10 · alert 9 · record 9입니다.
 
+## 보너스 xdr-02: 웹 주입 공격을 잡아 냅니다
+
+- 실행: `npm run xdr:run -- web-injection` → `xdr/web-injection/result.json`. 이어서 `node xdr/web-injection/block-rules.mjs` → `xdr/web-injection/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본은 고치지 않습니다.
+- `read-alerts.mjs`: 시각·출발 주소·계정·규칙 수준·설명만 뽑고 비밀값 표기는 `[가림]`. 경보 26건 → 26줄.
+- `patterns.json`: MITRE ATT&CK T1190 근거 패턴 4개(SQL 주입 CWE-89, 스크립트 주입 CWE-79, 경로 거슬러 올라가기 CWE-22, 명령 구분자 CWE-78). 모두 **같은 주소에서 5번 이상 반복**될 때만 맞춥니다. 한 번 나온 `select`·`SQL`·`스크립트` 같은 단어는 정상 검색어와 구별되지 않기 때문입니다. 명령 구분자 패턴은 카드의 세 신호 밖이지만 명확한 공격 wi-06이 이 형태라 T1190 근거로 넣었습니다.
+- `decide.mjs`: xdr-01과 같은 기준(패턴 일치 block, T1190 의심만 Jev, `JEV_URL` 없거나 응답 없으면 alert, 패턴 근거 없이 block 안 함). **다른 파일을 import하거나 읽지 않습니다**(xdr-01에서 판정자 격리 실행 때 멈췄던 문제를 처음부터 피함).
+- `block-rules.mjs`: block만 출발 주소 거부 규칙(만료 = 마지막 근거 경보 + 60분, 근거 경보 번호 포함), 계정으로는 막지 않고 정상 이벤트 주소는 넣지 않음. `src/decider.mjs`는 그대로입니다.
+- 실행 결과(2026-10-07, 이 저장소에서 실제 실행): `counts` = block 8 · alert 9 · record 9. 정상 이벤트(T1190 없음) 9건 중 block 0건. `decide.mjs`만 따로 둔 격리 실행도 같은 결과. 거부 규칙 7개, 다시 흘리기 막힘 8건·통과 18건·잘못 막힘 0건. 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
+
 ## 2단계: 자료를 코드 밖으로 옮겼습니다
 
 - 가상 메모 네 건은 학습용 Supabase 테이블 `public.notes`로 옮겼습니다. 테이블은 RLS가 켜져 있고 정책이 없으며, `anon`·`authenticated`에는 읽기 권한이 없습니다. `owner_id uuid` 칸은 3단계 로그인 연결을 위해 미리 두었습니다(외래키 없음).

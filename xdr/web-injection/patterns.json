@@ -1,0 +1,36 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "web-injection",
+  "source": "MITRE ATT&CK T1190 Exploit Public-Facing Application (https://attack.mitre.org/techniques/T1190/)",
+  "common": {
+    "sameSource": true,
+    "minRepeats": 5,
+    "note": "한 번 나온 표기는 정상 검색어(수업명 select, SQL 공지 등)와 구별되지 않으므로 같은 주소에서 반복될 때만 패턴으로 봅니다."
+  },
+  "patterns": [
+    {
+      "name": "sql-injection-repeat",
+      "technique": "T1190",
+      "match": { "markers": ["SQL 구문", "SQL 표식", "데이터베이스 조회를 이어 붙", "doc-sql", "union select", "' or 1=1"], "minRepeats": 5 },
+      "evidence": "MITRE ATT&CK T1190: 공개 웹 앱의 요청 인자에 SQL 구문을 섞어 데이터베이스 질의를 바꾸는 SQL 주입(CWE-89)이 대표 악용 형태입니다."
+    },
+    {
+      "name": "script-injection-repeat",
+      "technique": "T1190",
+      "match": { "markers": ["스크립트 삽입 표기", "스크립트 표식", "doc-script", "doc-mixed", "<script", "javascript:"], "minRepeats": 5 },
+      "evidence": "MITRE ATT&CK T1190: 요청 인자에 스크립트 태그를 넣어 화면에서 실행되게 하는 스크립트 주입(XSS, CWE-79)으로 공개 웹 앱을 악용합니다."
+    },
+    {
+      "name": "path-traversal-repeat",
+      "technique": "T1190",
+      "match": { "markers": ["거슬러 올라가", "경로 이탈", "doc-up-repeat", "../../"], "minRepeats": 5 },
+      "evidence": "MITRE ATT&CK T1190: 경로 인자에 ../ 를 반복해 허용 폴더 밖 파일을 읽는 경로 거슬러 올라가기(CWE-22)로 공개 웹 앱을 악용합니다."
+    },
+    {
+      "name": "command-separator-repeat",
+      "technique": "T1190",
+      "match": { "markers": ["명령 구분자", "doc-cmd", "$(", "&&"], "minRepeats": 5 },
+      "evidence": "MITRE ATT&CK T1190: 요청 인자에 ; && $( 같은 명령 구분자를 넣어 서버 명령을 덧붙이는 명령 주입(CWE-78)으로 공개 웹 앱을 악용합니다."
+    }
+  ]
+}
