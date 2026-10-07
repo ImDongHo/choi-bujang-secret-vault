@@ -60,6 +60,16 @@
 - `src/attack-check.mjs`(학생 자기 점검, 심판 판정 아님): 무로그인·가짜 토큰으로 자료 API 5개 경로, anon 키로 Data API 직접 GET·POST를 실제로 보내 결과를 적습니다. A·B 토큰이 필요한 점검(자기 메모 CRUD, B→A 접근, 소유자 변경)은 비밀번호·토큰을 코드에 넣지 않으므로 **미실행**으로 남기고 화면에서 직접 확인합니다.
 - 로컬에서 가짜 DB와 가짜 A·B 토큰으로 시험한 결과: B→A·A→B 메모 GET·PUT·DELETE 모두 404(DB 그대로), 본문 `owner_id`·`userId` 위조 403, 자기 메모 CRUD 정상, 무로그인 401. 실제 배포에서의 결과는 학생이 확인합니다.
 
+## 보너스 xdr-01: 무차별 로그인 공격을 잡아 냅니다
+
+- 실행: `npm run xdr:run -- brute-force` → `xdr/brute-force/result.json`. 이어서 `node xdr/brute-force/block-rules.mjs` → 거부 규칙 `xdr/brute-force/deny-rules.json`, 알림 `xdr/alerts.log`. 경보 원본 `xdr/fixtures/brute-force.json`은 고치지 않습니다.
+- `read-alerts.mjs`: 경보에서 시각·출발 주소·계정·규칙 수준·설명만 뽑고, 비밀값처럼 보이는 표기는 `[가림]`으로 바꿉니다. 경보 28건 → 28줄.
+- `patterns.json`: MITRE ATT&CK T1110 근거 패턴 2개. `same-source-rapid-failures`(T1110.001, 같은 주소 실패 20건 이상·5분 이내·뒤에 성공 없음), `password-spraying`(T1110.003, 같은 비밀번호를 계정 5개 이상에).
+- `decide.mjs`: 패턴이 맞으면 확신도 0.86~0.98 → `block`. 패턴은 안 맞지만 T1110 의심(규칙에 T1110 또는 실패 2건 이상)이면 Jev에게 확신도를 묻고, 0.85 이상 block·0.5 이상 alert·그 아래 record. **Jev 주소는 환경변수 `JEV_URL`로만 받으며, 없거나 응답이 없으면 `alert`(0.6)** 입니다. 패턴 근거가 없으면 Jev가 높게 답해도 막지 않고 alert로 낮춥니다. 판정자의 격리 환경에도 네트워크가 없으니 애매한 건은 alert가 됩니다.
+- `block-rules.mjs`: `block`만 출발 주소 단위 거부 규칙으로 만듭니다(만료 = 마지막 근거 경보 + 60분, 근거 경보 번호 포함). 계정 이름으로는 막지 않고, 정상 이벤트에 나온 주소는 넣지 않습니다. `src/decider.mjs`의 기존 규칙은 고치지 않았습니다. 판정 요청 계약에 출발 주소가 없어서, 지금은 `deny-rules.json`과 `isDenied()`로만 확인합니다.
+- 실행 결과(2026-10-07, 이 저장소에서 실제 실행): `counts` = block 10 · alert 9 · record 9. 정상 이벤트(규칙 수준 3 이하, T1110 없음) 9건 중 block 0건. 거부 규칙 9개(주소 9곳). 시험 경보를 다시 흘리면 막힘 10건(모두 block 판정), 통과 18건, 잘못 막힘 0건.
+- 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
+
 ## 2단계: 자료를 코드 밖으로 옮겼습니다
 
 - 가상 메모 네 건은 학습용 Supabase 테이블 `public.notes`로 옮겼습니다. 테이블은 RLS가 켜져 있고 정책이 없으며, `anon`·`authenticated`에는 읽기 권한이 없습니다. `owner_id uuid` 칸은 3단계 로그인 연결을 위해 미리 두었습니다(외래키 없음).

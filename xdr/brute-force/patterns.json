@@ -1,0 +1,28 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "brute-force",
+  "source": "MITRE ATT&CK T1110 Brute Force (https://attack.mitre.org/techniques/T1110/)",
+  "patterns": [
+    {
+      "name": "same-source-rapid-failures",
+      "technique": "T1110.001",
+      "match": {
+        "sameSource": true,
+        "minFailures": 20,
+        "maxWindowMinutes": 5,
+        "noSuccessAfter": true
+      },
+      "evidence": "MITRE ATT&CK T1110.001 Password Guessing: 한 출발지가 짧은 시간에 비밀번호를 반복해 추측하면 같은 주소의 로그인 실패가 연속으로 몰립니다."
+    },
+    {
+      "name": "password-spraying",
+      "technique": "T1110.003",
+      "match": {
+        "sameSource": true,
+        "samePassword": true,
+        "minAccounts": 5
+      },
+      "evidence": "MITRE ATT&CK T1110.003 Password Spraying: 계정 잠금을 피하려고 같은 비밀번호 하나를 여러 계정에 차례로 넣습니다."
+    }
+  ]
+}
