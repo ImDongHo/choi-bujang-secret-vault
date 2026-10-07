@@ -1,14 +1,35 @@
 // 보너스 xdr-01 만들기 3: 무차별 로그인 공격(MITRE ATT&CK T1110) 경보 판단.
-// 1) read-alerts.mjs로 뽑은 항목과 경보 수치를 patterns.json의 패턴과 맞춰 봅니다.
+// 1) 경보의 시각·출발 주소·계정·규칙 수준·설명과 수치를 아래 PATTERNS(= patterns.json과 같은 값)와 맞춰 봅니다.
 // 2) 패턴은 안 맞지만 T1110 의심 신호가 있는 애매한 건만 Jev에게 확신도(0~1)를 묻습니다.
 // 3) 확신도 0.85 이상 block, 0.5 이상 alert, 그 아래 record. Jev가 응답하지 않으면 alert.
 // Jev 주소는 환경변수 JEV_URL로만 받습니다(없으면 응답 없음과 같음). 키·토큰은 코드에 두지 않습니다.
 // 정상 사용자를 막지 않도록, 패턴 근거가 없는 경보는 Jev가 높게 답해도 block하지 않습니다.
-import { readFileSync } from 'node:fs';
-import { extractAlert } from './read-alerts.mjs';
+// 판정자는 이 파일 하나만 격리 환경에서 실행할 수 있으므로 다른 파일을 import하거나 읽지 않습니다.
 
-const PATTERNS = JSON.parse(readFileSync(new URL('./patterns.json', import.meta.url), 'utf8')).patterns;
+// patterns.json과 같은 값입니다(바꿀 때는 두 곳을 함께 바꿉니다).
+export const PATTERNS = Object.freeze([
+  { name: 'same-source-rapid-failures', technique: 'T1110.001',
+    match: { sameSource: true, minFailures: 20, maxWindowMinutes: 5, noSuccessAfter: true } },
+  { name: 'password-spraying', technique: 'T1110.003',
+    match: { sameSource: true, samePassword: true, minAccounts: 5 } },
+]);
 const byName = Object.fromEntries(PATTERNS.map(pattern => [pattern.name, pattern]));
+
+// 판단에 필요한 다섯 항목(시각·출발 주소·계정·규칙 수준·설명)만 꺼냅니다. read-alerts.mjs의 extractAlert와 같은 모양입니다.
+function extractAlert(alert) {
+  const data = alert?.data ?? {};
+  const accounts = typeof data.accounts === 'string' && data.accounts.trim()
+    ? data.accounts.split(',').map(name => name.trim()).filter(Boolean)
+    : typeof data.srcuser === 'string' ? [data.srcuser] : [];
+  return {
+    id: typeof alert?.id === 'string' ? alert.id : '',
+    time: typeof alert?.timestamp === 'string' ? alert.timestamp : null,
+    srcip: typeof data.srcip === 'string' ? data.srcip : null,
+    accounts,
+    level: Number.isFinite(alert?.rule?.level) ? alert.rule.level : null,
+    description: typeof alert?.rule?.description === 'string' ? alert.rule.description : '',
+  };
+}
 
 export const BLOCK_AT = 0.85;
 export const ALERT_AT = 0.5;
