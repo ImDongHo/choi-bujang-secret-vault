@@ -285,6 +285,23 @@
 - 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
 - 수정(심판 `X01_CLEAR_NOT_BLOCKED`, 커밋 `c25583f`): 판정자처럼 실행기·경보·`decide.mjs`만 따로 두고 돌리면 `decide.mjs`가 `read-alerts.mjs`·`patterns.json`을 찾지 못해 실행이 멈췄습니다. `decide.mjs`가 다른 파일을 import하거나 읽지 않도록 패턴 값(`patterns.json`과 같은 값)과 항목 추출을 파일 안에 넣었습니다. 격리 실행 결과도 block 10 · alert 9 · record 9입니다.
 
+## 보너스 xdr-06: 자료 빼돌리기를 잡아 냅니다
+
+- 실행: `npm run xdr:run -- exfiltration` → `xdr/exfiltration/result.json`. 이어서 `node xdr/exfiltration/respond.mjs` → 거부 규칙 `xdr/exfiltration/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/exfiltration.json`은 고치지 않습니다.
+- `read-alerts.mjs`(확인용, decide.mjs가 불러오지 않음): 시각·출발 주소·계정·규칙 수준·설명만 뽑고 비밀값처럼 보이는 값은 가립니다. 목적지·전송량은 출력하지 않습니다. `node xdr/exfiltration/read-alerts.mjs` → 경보 30건·뽑은 줄 30줄 일치.
+- `patterns.json`: 근거가 있는 패턴 셋만 두고, 모두 50MB 이상 전송일 때만 맞습니다. 패턴마다 근거를 한 줄씩 적었습니다.
+  - `large-transfer-unfamiliar-destination`(T1048): 처음 보는·외부 목적지, 평소 쓰지 않던 포트, 5번 이상 반복, 파일 50개 이상
+  - `off-hours-archive-exfil`(T1048): 업무 시간 밖이나 처음 보는 주소로 나간 압축 파일
+  - `c2-channel-exfil`(T1041): 명령 통로로 나간 큰 파일
+- `decide.mjs`: 같은 값을 파일 맨 위 상수로 두고, import·파일 읽기/쓰기·바깥 요청 없이 계산합니다.
+  - 패턴이 맞으면 0.88부터 시작해 block(0.85 이상)입니다. 여러 패턴·200MB 이상·파일 100개 이상 또는 반복·규칙 수준 12 이상이면 더합니다.
+  - 유출 관련 T1041·T1048 경보이지만 패턴이 없으면 alert(0.6)입니다.
+  - 수업 자료 주소로 끝난 작은 동기화나 근거가 없으면 record입니다. MITRE 태그만으로는 막지 않습니다.
+- `respond.mjs`: block 결과만 출발 주소 단위 거부 규칙(만료 60분, 근거 경보 번호)으로 넣고, 계정으로는 막지 않습니다. 판정기(`src/decider.mjs`)의 기존 규칙은 고치지 않았습니다.
+- 결과(로컬, 2026-10-13): block 10 · alert 10 · record 10, 정상 이벤트 block 0건, 거부 규칙 9개.
+  - 다시 흘리기에서 명확한 공격 10건만 막히고 정상 요청 10건은 모두 통과했습니다.
+  - 아무것도 없는 격리 환경에서 decide.mjs 한 파일만 불러와도 같은 건수입니다. 심판의 격리 실행 결과는 제출 뒤 확인합니다.
+
 ## 보너스 xdr-05: 권한 가로채기를 잡아 냅니다
 
 - 실행: `npm run xdr:run -- privilege` → `xdr/privilege/result.json`. 이어서 `node xdr/privilege/respond.mjs` → 거부 규칙 `xdr/privilege/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/privilege.json`은 고치지 않습니다.

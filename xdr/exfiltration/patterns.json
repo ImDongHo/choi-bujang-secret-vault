@@ -1,0 +1,32 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "exfiltration",
+  "source": "MITRE ATT&CK T1041 Exfiltration Over C2 Channel (https://attack.mitre.org/techniques/T1041/) · T1048 Exfiltration Over Alternative Protocol (https://attack.mitre.org/techniques/T1048/)",
+  "common": {
+    "largeBytes": 50000000,
+    "bulkFiles": 50,
+    "minRepeats": 5,
+    "normalMarkers": ["작은 동기화", "동기화가 끝났"],
+    "note": "50MB 미만 전송, 한 번만 높은 전송량, 실패한 전송, 압축만 하고 보내지 않은 경우는 수업 자료 동기화·백업과 구별되지 않으므로 막지 않고 사람 확인(alert)으로 돌립니다."
+  },
+  "patterns": [
+    {
+      "name": "large-transfer-unfamiliar-destination",
+      "technique": "T1048",
+      "match": { "minBytes": "largeBytes", "anyOf": ["처음 보는", "외부 주소", "평소에 쓰지 않던", "repeats>=minRepeats", "files>=bulkFiles"] },
+      "evidence": "MITRE ATT&CK T1048: 공격자는 평소 쓰지 않는 목적지·포트로 큰 자료를 한꺼번에 또는 반복해서 보내 정상 통로 밖으로 자료를 빼냅니다."
+    },
+    {
+      "name": "off-hours-archive-exfil",
+      "technique": "T1048",
+      "match": { "minBytes": "largeBytes", "markers": ["압축"], "anyOf": ["수업 시간 밖", "업무 시간 밖", "처음 보는"] },
+      "evidence": "MITRE ATT&CK T1048: 공격자는 빼낼 자료를 압축 파일로 묶어(T1560) 업무 시간 밖이나 처음 보는 주소로 내보내 탐지를 피합니다."
+    },
+    {
+      "name": "c2-channel-exfil",
+      "technique": "T1041",
+      "match": { "minBytes": "largeBytes", "markers": ["명령 통로"] },
+      "evidence": "MITRE ATT&CK T1041: 공격자는 이미 열어 둔 명령 통로(C2)로 큰 파일을 반복해서 보내 따로 연결을 만들지 않고 자료를 빼냅니다."
+    }
+  ]
+}
