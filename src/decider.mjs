@@ -5,7 +5,59 @@
 // 미등록(false)이거나 값이 없으면 device_not_registered로 거부합니다. request.device 같은 계약 밖 값은 쓰지 않습니다.
 // 7단계 step_up_required: 엔진이 넘긴 가상 사건에서 평소와 다른 시각 + 처음 보는 네트워크 + 짧은 시간 많은 읽기가
 // 겹치면 추가 본인 확인(step_up)을 요청합니다. 지역 하나만으로는 판정하지 않고, 영구 차단(deny)하지 않습니다.
-export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required']);
+// 8단계 resource_zone: 엔진이 확인한 사용자(subjectId)·기기(deviceId)·메서드·정확한 경로로 자원 구역을 나눕니다.
+// 허용 목록에 없는 경로, 쿼리로 기능을 고르는 요청, :id 자리의 기능 이름(export 등)은 거부합니다.
+// 강사 공지 수정은 계약에 강사 역할이 아직 없으므로(docs/DECIDER_REQUEST.md) 누구든 거부합니다.
+// 메모 소유자(A/B) 비교는 판정 요청에 소유자 정보가 없어 자료 API(api/notes/[id].js)가 저장된 owner_id로 합니다.
+export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required', 'resource_zone']);
+
+// 엔진 경로 모양(route)과 실제 경로(path) 쌍. /api 접두어가 있는 모양과 없는 모양을 모두 받되 서로 섞이면 거부합니다.
+const ZONES = Object.freeze([
+  { route: 'GET /notes', zone: 'own_notes' },
+  { route: 'POST /notes', zone: 'own_notes' },
+  { route: 'GET /notes/:id', zone: 'own_notes' },
+  { route: 'PUT /notes/:id', zone: 'own_notes' },
+  { route: 'DELETE /notes/:id', zone: 'own_notes' },
+  { route: 'GET /notices', zone: 'notices_read' },
+  { route: 'GET /notices/:id', zone: 'notices_read' },
+  { route: 'PUT /notices/:id', zone: 'notices_write', instructorOnly: true },
+  { route: 'POST /auth/login', zone: 'session' },
+  { route: 'POST /auth/refresh', zone: 'session' },
+  { route: 'POST /auth/logout', zone: 'session' },
+]);
+// :id 자리에는 자료 ID만 옵니다. 기능 이름은 같은 깊이에 두지 않으므로 ID로도 받지 않습니다.
+const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u;
+const RESERVED_SEGMENTS = new Set(['export', 'import', 'download', 'backup', 'dump', 'bulk', 'batch', 'all',
+  'admin', 'search', 'list', 'new', 'edit', 'update', 'delete', 'raw', 'share', 'restore']);
+const DEVICE_ID = /^[0-9a-f]{16}$/u;
+
+export function matchZone(request) {
+  const { method, path, route, queryLength } = request ?? {};
+  if (typeof method !== 'string' || typeof path !== 'string' || typeof route !== 'string') return null;
+  if (queryLength !== 0) return null;                       // 쿼리로 기능을 고르지 않습니다.
+  if (path.includes('?') || path.includes('#') || path.includes('%') || path.includes('//')) return null;
+  const [routeMethod, routePath, extra] = route.split(' ');
+  if (extra !== undefined || routeMethod !== method) return null;
+  const prefixed = routePath?.startsWith('/api/');
+  if (prefixed !== path.startsWith('/api/')) return null;    // 접두어가 섞이면 거부
+  const shape = prefixed ? routePath.slice(4) : routePath;
+  const actual = prefixed ? path.slice(4) : path;
+  const zone = ZONES.find(item => item.route === `${method} ${shape}`);
+  if (!zone) return null;
+  const shapeParts = shape.split('/');
+  const pathParts = actual.split('/');
+  if (shapeParts.length !== pathParts.length) return null;
+  for (let index = 0; index < shapeParts.length; index += 1) {
+    if (shapeParts[index] === ':id') {
+      const id = pathParts[index];
+      if (!RESOURCE_ID.test(id) || RESERVED_SEGMENTS.has(id.toLowerCase())) return null;
+    } else if (shapeParts[index] !== pathParts[index]) {
+      return null;
+    }
+  }
+  return zone;
+}
+
 
 // 7단계 만들기 1: 접속 정보의 출처 구분.
 // 엔진이 정한 출처만 받습니다. 'none'은 실제 경로(접속 정보 없음), 'judge_fixture'는 엔진이 검증해 넘긴 가상 사건입니다.
@@ -86,6 +138,13 @@ export async function decide(request) {
   if (request.deviceRegistered !== true) {
     return response(request, 'deny', 'device_not_registered', 'device_registered');
   }
+  // 8단계: 엔진이 확인한 사용자·기기가 없으면 구역을 고를 수 없으므로 거부합니다.
+  if (typeof request.subjectId !== 'string' || !request.subjectId || !DEVICE_ID.test(request.deviceId ?? '')) {
+    return response(request, 'deny', 'subject_not_verified', 'resource_zone');
+  }
+  const zone = matchZone(request);
+  if (!zone) return response(request, 'deny', 'route_not_allowed', 'resource_zone');
+  if (zone.instructorOnly) return response(request, 'deny', 'instructor_required', 'resource_zone');
   const signals = readSignals(request);
   const events = readRecentEvents(request);
   // 출처가 엔진 값(none·judge_fixture)이 아니거나 형식이 틀린 접속 정보는 믿지도, 정상으로 채우지도 않고 다시 확인합니다.

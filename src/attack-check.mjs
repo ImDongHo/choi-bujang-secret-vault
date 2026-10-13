@@ -186,11 +186,26 @@ async function stepSevenChecks(app, config) {
   ]);
 }
 
+// 8단계: 메모(notes)와 강사 공지(notices)는 다른 자원 구역입니다. 토큰 없이 공지 구역을 불러 거부되는지 봅니다.
+// B의 A 메모 접근·학생의 공지 수정은 로그인 토큰이 필요해 미실행으로 남깁니다.
+async function stepEightChecks(app, config) {
+  const notice = new URL('/api/notices/c0000000-0000-4000-8000-000000000001', app);
+  return (await stepSevenChecks(app, config)).concat([
+    { attackId: 'anonymous_notice_read', expected: '토큰 없는 GET /api/notices/:id는 401',
+      observed: await sendRequest(notice) },
+    { attackId: 'anonymous_notice_update', expected: '토큰 없는 PUT /api/notices/:id는 401',
+      observed: await sendRequest(notice, { method: 'PUT', body: { title: '자기 점검', body: '비로그인 공지 수정 시도', role: 'instructor' } }) },
+    { attackId: 'student_notice_update', expected: '강사가 아닌 학생 토큰의 PUT /api/notices/:id는 403 INSTRUCTOR_REQUIRED',
+      observed: '미실행: 학생 토큰이 필요해 화면 개발자 도구로 직접 확인' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 8) return stepEightChecks(app, config);
   if (config.step === 7) return stepSevenChecks(app, config);
   if (config.step === 6) return stepSixChecks(app, config);
   if (config.step === 5) return stepFiveChecks(app, config);

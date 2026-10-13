@@ -18,7 +18,17 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 7단계 저장점
+## 현재 상태: 8단계 저장점
+
+- 8단계(자료마다 갈 수 있는 구역을 나눕니다). 화면 메뉴는 바꾸지 않았습니다.
+- 자원 ID(만들기 1): 메모는 `notes:<id>`, 강사 공지는 `notices:<id>`로 서버가 구별합니다(`src/notes-api.mjs`의 `resourceId`). 응답 모양 `{id,title,body}`와 기존 메모 주소는 그대로입니다. 학습 DB에 `public.notices`(공개 가능한 시험 공지 1건)와 강사 권한 목록 `public.instructors`(지금 0명)를 만들었습니다(`supabase/step8-notices.sql`, 적용함). 두 테이블 모두 RLS를 켜고 `anon`·`authenticated` 직접 권한은 없으며, 서버(`service_role`)만 공지 SELECT·UPDATE, 강사 목록 SELECT가 됩니다.
+- 새 API: `GET /api/notices`, `GET /api/notices/:id`(로그인한 사람 누구나), `PUT /api/notices/:id`(강사만). `allowedRoutes`에 추가했습니다.
+- 판정기 구역 규칙(만들기 2): `src/decider.mjs`에 `resource_zone`. 엔진이 확인한 `subjectId`·`deviceId`가 없으면 `subject_not_verified`, 허용 목록에 없는 경로·쿼리로 기능을 고르는 요청(`queryLength`가 0이 아님)·`:id` 자리의 기능 이름(`export` 등)·메서드와 경로 모양 불일치·깊이 차이는 `route_not_allowed`로 거부합니다. 공지 수정(`PUT /notices/:id`)은 계약에 강사 역할이 아직 없어 누구든 `instructor_required`로 거부합니다. 이전 규칙(`device_registered`, `step_up_required`)은 그대로 먼저 적용됩니다. 메모 소유자(A/B) 비교는 판정 요청에 소유자 정보가 없어 자료 API가 맡습니다.
+- 자료 API 재대조(만들기 3): 메모는 저장된 `owner_id`와 검증된 사용자 ID를 비교해 남의 메모는 404, 공지 수정은 `public.instructors`에 저장된 검증된 사용자만 허용(아니면 403 `INSTRUCTOR_REQUIRED`). 화면 메뉴나 요청 본문의 `role`·`isInstructor`는 믿지 않습니다. 거부할 때 서버 기록에 `deny <자원 ID> reason=<사유>`만 남기며 토큰·키·내용·사용자 ID는 남기지 않습니다.
+- 강사 지정(필요할 때 학생이 SQL Editor에서): `insert into public.instructors (user_id) select id from auth.users where email = '<강사 가상 이메일>' on conflict do nothing;`
+- 실행 기록(2026-10-13, 로컬 가짜 DB·가짜 토큰): `npm run decider:test` 4줄 통과, `npm run fixture:7` allow/step_up. 판정기 — A 자기 메모 GET·PUT allow, 학생 공지 수정 deny(instructor_required), 모르는 경로·`/notes/export`·쿼리 있음·접두어 섞임·깊이 다름 deny. 자료 API — B의 A 메모 GET·PUT(본문 role=instructor 포함) 404, 학생 공지 PUT(본문 role=instructor 포함) 403·원문 그대로, 강사 공지 PUT 200, 강사도 남의 메모 404, 무로그인 401. 학생 로컬 실행이며 심판 판정이 아닙니다.
+
+### 7단계 기능 (유지)
 
 - 7단계(평소와 다른 접속은 다시 확인합니다): `src/decider.mjs`에 규칙 `step_up_required`를 더했습니다. `RULE_IDS` = `['starter.deny', 'device_registered', 'step_up_required']`. 기기 규칙(`device_registered`)은 그대로 먼저 적용됩니다.
 - 접속 정보 출처 구분(만들기 1): `signals.source`가 `none`(실제 경로, 접속 정보 없음)이면 기기 규칙만 적용하고, `judge_fixture`(엔진이 검증해 넘긴 가상 사건)만 가상 사건 규칙에 씁니다. 그 밖의 출처(클라이언트 헤더 등)나 칸이 다르거나 빠진 신호는 믿지 않고 정상값으로 채우지도 않으며 `step_up`으로 다시 확인합니다. 가상 사건에서 빠진 시각·네트워크는 '확인 안 됨'으로 봅니다. `judge_fixture` 신호를 실제 위치 증거로 쓰지 않습니다.

@@ -16,6 +16,18 @@ export function toNote(row) {
   return { id: row.id, title: row.title, body: row.content };
 }
 
+// 8단계: 메모와 강사 공지를 서버가 구별하는 자원 ID. 응답 모양({id,title,body})은 바꾸지 않고 판단·기록에만 씁니다.
+export const RESOURCE_KINDS = Object.freeze({ notes: 'notes', notices: 'notices' });
+export function resourceId(kind, id) {
+  if (!Object.hasOwn(RESOURCE_KINDS, kind)) throw new TypeError('unknown_resource_kind');
+  return `${kind}:${id ?? '*'}`;
+}
+
+// 거부 사유를 짧게 남깁니다. 토큰·키·메모 내용·사용자 ID는 기록하지 않습니다.
+export function logDenied(resource, reason) {
+  console.warn(`deny ${resource} reason=${reason}`);
+}
+
 // 서버 설정과 로그인을 확인합니다. 실패하면 응답을 보내고 null을 돌려줍니다.
 export async function requireLogin(request, response, allow) {
   response.setHeader('Cache-Control', 'no-store');
@@ -71,8 +83,14 @@ export function claimsOtherOwner(input, userId) {
 }
 
 // Supabase REST(PostgREST)를 서버 전용 키로 부릅니다.
-export async function notesTable(ctx, { method = 'GET', query = {}, body, prefer } = {}) {
-  const endpoint = new URL('/rest/v1/notes', ctx.url);
+export function notesTable(ctx, options) {
+  return restTable(ctx, 'notes', options);
+}
+
+const TABLES = new Set(['notes', 'notices', 'instructors']);
+export async function restTable(ctx, table, { method = 'GET', query = {}, body, prefer } = {}) {
+  if (!TABLES.has(table)) throw new TypeError('unknown_table');
+  const endpoint = new URL(`/rest/v1/${table}`, ctx.url);
   for (const [name, value] of Object.entries(query)) endpoint.searchParams.set(name, value);
   const headers = { apikey: ctx.key, Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -84,9 +102,17 @@ export async function notesTable(ctx, { method = 'GET', query = {}, body, prefer
   try { data = await upstream.json(); } catch { /* 본문이 없는 응답 */ }
   if (!upstream.ok) {
     // 상태 코드와 DB 오류 번호만 남기고 키·토큰·메모 내용은 기록하지 않습니다.
-    console.error(`notes: Supabase 응답 상태 ${upstream.status} ${data?.code ?? ''}`.trim());
+    console.error(`api: Supabase 응답 상태 ${upstream.status} ${data?.code ?? ''}`.trim());
   }
   return { ok: upstream.ok, status: upstream.status, code: data?.code, data };
+}
+
+// 8단계: 강사 권한은 DB의 public.instructors에 저장된 검증된 사용자 ID로만 확인합니다.
+// 화면 메뉴나 요청 본문의 role은 믿지 않습니다.
+export async function isInstructor(ctx) {
+  const result = await restTable(ctx, 'instructors', { query: { select: 'user_id', user_id: `eq.${ctx.userId}`, limit: '1' } });
+  if (!result.ok || !Array.isArray(result.data)) throw new Error('instructor_lookup_failed');
+  return result.data.length === 1;
 }
 
 export function unavailable(response) {
