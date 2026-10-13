@@ -26,6 +26,8 @@ revoke truncate, references, trigger, update, delete on table public.ops_events 
 -- 12단계 수정: 제출 묶음·점검 요청이 X-Aleph-Attack-Id 헤더로 보낸 점검 이름(attackId)을 함께 남깁니다(비밀값 아님).
 alter table public.ops_events add column if not exists attack_id text
   check (attack_id is null or attack_id ~ '^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$');
+-- 진단용: 요청에 Authorization 헤더가 있었는지만(값은 저장하지 않음)
+alter table public.ops_events add column if not exists auth_present boolean;
 create index if not exists ops_events_anon_at on public.ops_events (at desc) where owner_id is null;
 
 commit;

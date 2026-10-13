@@ -15,7 +15,8 @@ function appUrl(config) {
 }
 
 // 12단계: 점검 요청마다 X-Aleph-Attack-Id 헤더에 점검 이름(attackId)을 실어, 서버 기록과 어느 점검의 요청인지 대조할 수 있게 합니다.
-const attackHeaders = attackId => (attackId ? { 'X-Aleph-Attack-Id': attackId } : {});
+// 헤더 이름은 소문자로 씁니다(기록 쪽이 이름을 그대로 찾을 수 있게). 같은 값을 x-attack-id에도 싣습니다.
+const attackHeaders = attackId => (attackId ? { 'x-aleph-attack-id': attackId, 'x-attack-id': attackId } : {});
 
 async function countNotes(url, attackId) {
   const response = await fetch(url, { headers: attackHeaders(attackId), redirect: 'error', signal: AbortSignal.timeout(10000) });

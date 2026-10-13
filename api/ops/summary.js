@@ -166,5 +166,5 @@ async function handler(request, response) {
   return response.status(200).json(summary);
 }
 
-// 12단계 수정: 요약을 읽는 요청은 기록에 더하지 않습니다(같은 시점의 화면 수치와 서버 기록이 일치하도록).
-export default withOpsEvents('ops', 'GET /api/ops/summary', handler, { record: false });
+// 요약을 읽는 요청도 기록에 한 줄 남지만 요약 수치에서는 뺍니다(SUMMARY_ROUTE). 같은 시점의 화면 수치와 서버 기록이 일치합니다.
+export default withOpsEvents('ops', 'GET /api/ops/summary', handler);

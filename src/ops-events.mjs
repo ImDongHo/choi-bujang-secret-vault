@@ -35,9 +35,8 @@ async function insertEvent(event) {
 }
 
 // route: 'GET /api/notes/:id'처럼 경로 모양 문자열, 또는 request를 받아 경로 모양을 돌려주는 함수
-// options.record === false: 작전실 요약처럼 기록을 '읽기만' 하는 경로는 ops_events에 줄을 더하지 않습니다.
-//   보기만 해도 수치가 바뀌면 화면 수치와 가린 서버 기록을 대조할 수 없기 때문입니다(요청 ID와 로그 한 줄은 그대로 남김).
-export function withOpsEvents(service, route, handler, { record = true } = {}) {
+// 작전실 요약 조회도 한 줄 남기지만, 요약 수치에서는 빼고 셉니다(api/ops/summary.js). 보기만 해도 수치가 바뀌지 않게 하기 위함입니다.
+export function withOpsEvents(service, route, handler) {
   if (!SERVICE.test(service)) throw new TypeError('invalid_ops_service');
   return async function opsHandler(request, response) {
     const requestId = randomUUID();
@@ -64,13 +63,15 @@ export function withOpsEvents(service, route, handler, { record = true } = {}) {
     const shape = String(typeof route === 'function' ? route(request) : route).slice(0, 60);
     const method = typeof request.method === 'string' && /^[A-Z]{3,7}$/u.test(request.method) ? request.method : 'OTHER';
     const reason = REASON.test(body?.error ?? '') ? body.error : '';
-    const rawAttack = request.headers?.[ATTACK_HEADER];
+    const rawAttack = request.headers?.[ATTACK_HEADER] ?? request.headers?.['x-attack-id'];
+    // 진단용: Authorization 헤더가 있었는지만 남깁니다(값은 읽지도 남기지도 않음).
+    const authPresent = typeof request.headers?.authorization === 'string' && request.headers.authorization.length > 0;
     const attackId = typeof rawAttack === 'string' && ATTACK_ID.test(rawAttack) ? rawAttack : null;
-    const recorded = !record ? 'skipped' : await insertEvent({
+    const recorded = await insertEvent({
       request_id: requestId, owner_id: userId, service, method, route: shape,
-      status, outcome: outcomeOf(status), reason, attack_id: attackId,
+      status, outcome: outcomeOf(status), reason, attack_id: attackId, auth_present: authPresent,
     });
-    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'} attack=${attackId ?? '-'}${recorded === 'skipped' ? ' record=skipped' : recorded ? '' : ' record=failed'}`);
+    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'} attack=${attackId ?? '-'}${authPresent ? ' auth=present' : ' auth=none'}${recorded ? '' : ' record=failed'}`);
 
     response.status(status);
     if (ended === 'json') response.json(body);
