@@ -28,7 +28,7 @@ async function countNotes(url, attackId) {
       // JSON이 아니면 메모 개수를 셀 수 없습니다.
     }
   }
-  return { status: response.status, count };
+  return { status: response.status, count, sent: `GET ${url.href}` };
 }
 
 // 2단계: 실제로 보낸 비로그인 요청의 결과만 적습니다. 메모 본문은 기록하지 않습니다.
@@ -70,7 +70,8 @@ async function sendRequest(url, { method = 'GET', authorization, body, attackId 
   const requestId = response.headers?.get?.('x-request-id');
   const serverDate = response.headers?.get?.('date');
   const trace = `${requestId ? `, 요청 ID ${requestId}` : ''}${serverDate ? `, 서버 시각 ${serverDate}` : ''}`;
-  return `HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`;
+  // 12단계: 실제로 보낸 요청(방식·전체 주소)을 앞에 적어 심판의 실행 기록과 대조할 수 있게 합니다.
+  return `${method} ${url.href} → HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`;
 }
 
 const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -281,7 +282,7 @@ async function stepTwelveChecks(app, config) {
   const staticFile = await countNotes(new URL('/data.json', app), 'anonymous_static_note_read');
   const results = [
     { attackId: 'anonymous_static_note_read', expected: '2단계: 공개 GET /data.json에서 메모 0건 또는 404',
-      observed: staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건` },
+      observed: `${staticFile.sent} → ${staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건`}` },
     // 1첩반상: 무인증 목록 조회에 이어 같은 제출본에서 다른 사람(B)의 메모 한 건을 연속 조회합니다.
     { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: await get('anonymous_api_list_read', notes) },
     { attackId: 'anonymous_other_note_read', expected: '4단계: 토큰 없는 GET /api/notes/:id(B 메모)는 401, 메모 없음', observed: await get('anonymous_other_note_read', otherNote) },
@@ -318,9 +319,10 @@ async function readOpsSummary(url, sentIds) {
   const requestId = response.headers?.get?.('x-request-id');
   const trace = requestId ? `, 요청 ID ${requestId}` : '';
   const records = Array.isArray(data?.events?.records) ? data.events.records : null;
-  if (!response.ok || !records) return `HTTP ${response.status}${data?.scope ? `, scope ${data.scope}` : ''}, 가린 기록 없음${trace}`;
+  const sent = `GET ${url.href}`;
+  if (!response.ok || !records) return `${sent} → HTTP ${response.status}${data?.scope ? `, scope ${data.scope}` : ''}, 가린 기록 없음${trace}`;
   const found = sentIds.filter(id => records.some(row => row.attackId === id));
-  return `HTTP ${response.status}, scope ${data.scope}, 가린 기록 ${records.length}줄, 점검 이름 기록 ${found.length}/${sentIds.length}${trace}`;
+  return `${sent} → HTTP ${response.status}, scope ${data.scope}, 가린 기록 ${records.length}줄, 점검 이름 기록 ${found.length}/${sentIds.length}${trace}`;
 }
 
 export async function runAttackChecks(config) {

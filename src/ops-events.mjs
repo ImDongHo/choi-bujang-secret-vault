@@ -35,7 +35,9 @@ async function insertEvent(event) {
 }
 
 // route: 'GET /api/notes/:id'처럼 경로 모양 문자열, 또는 request를 받아 경로 모양을 돌려주는 함수
-export function withOpsEvents(service, route, handler) {
+// options.record === false: 작전실 요약처럼 기록을 '읽기만' 하는 경로는 ops_events에 줄을 더하지 않습니다.
+//   보기만 해도 수치가 바뀌면 화면 수치와 가린 서버 기록을 대조할 수 없기 때문입니다(요청 ID와 로그 한 줄은 그대로 남김).
+export function withOpsEvents(service, route, handler, { record = true } = {}) {
   if (!SERVICE.test(service)) throw new TypeError('invalid_ops_service');
   return async function opsHandler(request, response) {
     const requestId = randomUUID();
@@ -64,11 +66,11 @@ export function withOpsEvents(service, route, handler) {
     const reason = REASON.test(body?.error ?? '') ? body.error : '';
     const rawAttack = request.headers?.[ATTACK_HEADER];
     const attackId = typeof rawAttack === 'string' && ATTACK_ID.test(rawAttack) ? rawAttack : null;
-    const recorded = await insertEvent({
+    const recorded = !record ? 'skipped' : await insertEvent({
       request_id: requestId, owner_id: userId, service, method, route: shape,
       status, outcome: outcomeOf(status), reason, attack_id: attackId,
     });
-    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'} attack=${attackId ?? '-'}${recorded ? '' : ' record=failed'}`);
+    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'} attack=${attackId ?? '-'}${recorded === 'skipped' ? ' record=skipped' : recorded ? '' : ' record=failed'}`);
 
     response.status(status);
     if (ended === 'json') response.json(body);

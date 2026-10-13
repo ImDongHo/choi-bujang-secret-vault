@@ -15,6 +15,8 @@ import { deviceStatus, rejectUnexpectedQuery, requireApprovedDevice, requireLogi
 import { maskSubject, withOpsEvents } from '../../src/ops-events.mjs';
 
 const WINDOW_HOURS = 24;
+// 작전실 요약 조회 자체는 사건으로 세지 않습니다(예전에 남은 줄도 제외).
+const SUMMARY_ROUTE = 'GET /api/ops/summary';
 const EVENT_LIMIT = 200;
 // src/detect.mjs가 돌려주는 탐지 규칙 이름(reasonCode)입니다.
 const DETECT_RULE_IDS = Object.freeze(['burst_read']);
@@ -51,7 +53,7 @@ async function eventsSection(ctx, owner = `eq.${ctx.userId}`) {
     owner_id: owner, at: `gte.${since}`, order: 'at.desc', limit: String(EVENT_LIMIT),
   } });
   if (!result.ok || !Array.isArray(result.data)) return notRun(result.status === 404 ? 'OPS_EVENTS_TABLE_MISSING' : 'OPS_EVENTS_UNREADABLE');
-  const records = result.data.map(row => ({
+  const records = result.data.filter(row => row.route !== SUMMARY_ROUTE).map(row => ({
     requestId: row.request_id, at: row.at, route: row.route, status: row.status, outcome: row.outcome, reason: row.reason || '',
     attackId: row.attack_id ?? null,
   }));
@@ -164,4 +166,5 @@ async function handler(request, response) {
   return response.status(200).json(summary);
 }
 
-export default withOpsEvents('ops', 'GET /api/ops/summary', handler);
+// 12단계 수정: 요약을 읽는 요청은 기록에 더하지 않습니다(같은 시점의 화면 수치와 서버 기록이 일치하도록).
+export default withOpsEvents('ops', 'GET /api/ops/summary', handler, { record: false });
