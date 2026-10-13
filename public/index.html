@@ -112,7 +112,7 @@
       </div>
       <p id="trials-meta" class="hint" aria-live="polite">미실행: 아직 요청을 보내지 않았습니다.</p>
       <div class="table-wrap"><table id="trials-table" hidden>
-        <thead><tr><th>단계</th><th>구분</th><th>요청</th><th>기대 결과</th><th>실제 API 결과</th><th>판정</th><th>요청 ID</th><th>확인 시각</th></tr></thead>
+        <thead><tr><th>단계</th><th>구분</th><th>요청</th><th>기대 결과</th><th>실제 API 결과</th><th>판정</th><th>요청 ID</th><th>확인 시각(서버 응답)</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </section>
@@ -451,7 +451,7 @@
       opsCards.replaceChildren(...Object.keys(OPS_TITLES).map(key => opsCard(key, ['미실행: 아직 서버에 요청하지 않았습니다.'], 'not_run')));
     }
 
-    // 서버가 보낸 가린 기록(records)을 화면이 다시 세어 서버 수치와 비교합니다. 다르면 「불일치」로 표시하고 수치를 고쳐 쓰지 않습니다.
+    // 화면에는 서버 응답의 수치를 그대로 씁니다. 같은 응답의 가린 기록(records)은 대조용으로만 다시 세고, 다르면 「불일치」로 표시합니다(수치를 고쳐 쓰지 않음).
     function recordsTable(caption, columns, records) {
       const wrap = el('details');
       wrap.append(el('summary', `${caption} ${records.length}줄 보기`));
@@ -491,7 +491,7 @@
         const rows = events.records;
         const counted = outcome => rows.filter(row => row.outcome === outcome).length;
         cards.push(checkedCard('events', [
-          `서버 기록 ${rows.length}줄${events.truncated ? `(최근 ${events.limit}줄까지만)` : ''} · 허용 ${counted('allowed')} · 거부 ${counted('denied')} · 오류 ${counted('error')}`,
+          `서버 기록 ${events.total}줄${events.truncated ? `(최근 ${events.limit}줄까지만)` : ''} · 허용 ${events.allowed} · 거부 ${events.denied} · 오류 ${events.error}`,
           `거부 사유: ${Object.entries(events.reasons).map(([code, count]) => `${code} ${count}`).join(', ') || '없음'}`,
         ], events, [[events.total, rows.length], [events.allowed, counted('allowed')], [events.denied, counted('denied')], [events.error, counted('error')]],
         recordsTable('가린 서버 기록', [['시각', row => localTime(row.at)], ['요청', row => row.route], ['상태', row => String(row.status)], ['결과', row => row.outcome], ['사유', row => row.reason || '-'], ['요청 ID', row => row.requestId]], rows)));
@@ -503,7 +503,7 @@
         const counted = status => rows.filter(row => row.status === status).length;
         cards.push(checkedCard('devices', [
           `이 기기: ${DEVICE_TEXT[devices.currentDevice] ?? devices.currentDevice}`,
-          `기기 기록 ${rows.length}줄 · 승인 ${counted('approved')} · 대기 ${counted('pending')} · 회수됨 ${counted('revoked')}`,
+          `기기 기록 ${devices.total}줄 · 승인 ${devices.approved} · 대기 ${devices.pending} · 회수됨 ${devices.revoked}`,
         ], devices, [[devices.total, rows.length], [devices.approved, counted('approved')], [devices.pending, counted('pending')], [devices.revoked, counted('revoked')]],
         recordsTable('기기 승인 기록', [['상태', row => row.status], ['요청 시각', row => localTime(row.requestedAt)], ['승인 시각', row => localTime(row.approvedAt)]], rows)));
       } else cards.push(opsCard('devices', [notRunText(devices)], 'not_run'));
@@ -514,11 +514,11 @@
       let table;
       lines.push(isConfirmed(recovery.policy) ? `안전 정책 사본: ${recovery.policy.version} (해시 검증 통과, ${recovery.policy.sha256Prefix}…)` : `안전 정책 사본: ${notRunText(recovery.policy)}`);
       if (isConfirmed(recovery.backups) && Array.isArray(recovery.backups.records)) {
-        lines.push(`내 메모 사본: ${recovery.backups.records.length}줄`);
+        lines.push(`내 메모 사본: ${recovery.backups.count}줄`);
         pairs.push([recovery.backups.count, recovery.backups.records.length]);
       } else lines.push(`내 메모 사본: ${notRunText(recovery.backups)}`);
       if (isConfirmed(recovery.restores) && Array.isArray(recovery.restores.records)) {
-        lines.push(`내 복원 기록: ${recovery.restores.records.length}줄`);
+        lines.push(`내 복원 기록: ${recovery.restores.count}줄`);
         pairs.push([recovery.restores.count, recovery.restores.records.length]);
         if (recovery.restores.records.length) table = recordsTable('복원 감사 기록', [['동작', row => row.action], ['시각', row => localTime(row.restoredAt)]], recovery.restores.records);
       } else lines.push(`내 복원 기록: ${notRunText(recovery.restores)}`);
@@ -570,7 +570,8 @@
       return {
         status: response.status, data,
         requestId: response.headers.get('x-request-id') ?? (response.headers.get('x-vercel-id') ? `vercel:${response.headers.get('x-vercel-id')}` : '없음'),
-        at: new Date().toISOString(),
+        // 확인 시각은 서버 응답의 Date 헤더만 씁니다(브라우저 시계로 채우지 않음). 없으면 비워 둡니다.
+        at: response.headers.get('date') ? new Date(response.headers.get('date')).toISOString() : null,
       };
     }
 
@@ -625,7 +626,7 @@
       const tr = el('tr');
       const id = el('td'); id.append(el('code', row.requestId));
       const verdict = el('td'); verdict.append(badge(row.verdict));
-      tr.append(el('td', row.step), el('td', row.kind), el('td', row.label), el('td', row.expected), el('td', row.actual), verdict, id, el('td', row.at ? localTime(row.at) : '-'));
+      tr.append(el('td', row.step), el('td', row.kind), el('td', row.label), el('td', row.expected), el('td', row.actual), verdict, id, el('td', row.at ? localTime(row.at) : '없음'));
       trialsTable.tBodies[0].append(tr);
     }
 
@@ -655,7 +656,7 @@
 
     trialsDownload.addEventListener('click', () => {
       const cell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-      const header = ['단계', '구분', '요청', '기대 결과', '실제 API 결과', '판정', '요청 ID', '확인 시각(UTC)'];
+      const header = ['단계', '구분', '요청', '기대 결과', '실제 API 결과', '판정', '요청 ID', '확인 시각(서버 응답 Date, UTC)'];
       const verdictText = { match: '일치', mismatch: '불일치', not_run: '미실행' };
       const lines = [header, ...trialRows.map(row => [row.step, row.kind, row.label, row.expected, row.actual, verdictText[row.verdict], row.requestId, row.at ?? ''])];
       const blob = new Blob([`\ufeff${lines.map(line => line.map(cell).join(',')).join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });

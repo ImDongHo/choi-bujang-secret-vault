@@ -63,16 +63,39 @@ async function sendRequest(url, { method = 'GET', authorization, body } = {}) {
       // JSON이 아니면 메모 개수를 셀 수 없습니다.
     }
   }
-  // 12단계: 서버가 붙인 요청 ID(X-Request-Id)와 확인 시각을 함께 적어 작전실 서버 기록과 대조할 수 있게 합니다.
+  // 12단계: 응답에 실제로 있는 요청 ID(X-Request-Id)와 서버 시각(Date 헤더)만 덧붙입니다. 없으면 적지 않고, 이 코드가 시각을 계산해 넣지 않습니다.
   const requestId = response.headers?.get?.('x-request-id');
-  const trace = requestId ? `, 요청 ID ${requestId}, ${new Date().toISOString()}` : '';
+  const serverDate = response.headers?.get?.('date');
+  const trace = `${requestId ? `, 요청 ID ${requestId}` : ''}${serverDate ? `, 서버 시각 ${serverDate}` : ''}`;
   return `HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`;
 }
 
+const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function utf8Bytes(text) {
+  const bytes = [];
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    if (code < 0x80) bytes.push(code);
+    else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+    else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+    else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 63), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+  }
+  return bytes;
+}
+function base64url(bytes) {
+  let out = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const n = (bytes[index] << 16) | ((bytes[index + 1] ?? 0) << 8) | (bytes[index + 2] ?? 0);
+    out += BASE64URL[(n >> 18) & 63] + BASE64URL[(n >> 12) & 63];
+    if (index + 1 < bytes.length) out += BASE64URL[(n >> 6) & 63];
+    if (index + 2 < bytes.length) out += BASE64URL[n & 63];
+  }
+  return out;
+}
+
 function unsignedToken(config) {
-  // 심판의 실행 환경에는 Node 전용 Buffer가 없을 수 있어 표준 TextEncoder·btoa로 base64url을 만듭니다.
-  const part = value => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))))
-    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+  // 심판의 실행 환경에는 Buffer·btoa·TextEncoder가 없을 수 있어 순수 JavaScript로 UTF-8·base64url을 만듭니다.
+  const part = value => base64url(utf8Bytes(JSON.stringify(value)));
   const now = Math.floor(Date.now() / 1000);
   return `${part({ alg: 'none', typ: 'JWT' })}.${part({
     iss: config.identityProvider?.issuer, aud: config.identityProvider?.audience,
@@ -246,6 +269,7 @@ async function stepTwelveChecks(app, config) {
   const notes = new URL('/api/notes', app);
   const item = new URL('/api/notes/00000000-0000-4000-8000-000000000000', app);
   const notice = new URL('/api/notices/c0000000-0000-4000-8000-000000000001', app);
+  const otherNote = new URL('/api/notes/b0000000-0000-4000-8000-000000000001', app);
   const probe = { title: '자기 점검', body: '비로그인 요청 시도' };
   const staticFile = await countNotes(new URL('/data.json', app));
   return [
@@ -254,6 +278,10 @@ async function stepTwelveChecks(app, config) {
     { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: await sendRequest(notes) },
     { attackId: 'forged_token_list_read', expected: '3단계: 서명 없는 가짜 토큰의 GET /api/notes는 401',
       observed: await sendRequest(notes, { authorization: `Bearer ${unsignedToken(config)}` }) },
+    // 1첩반상: 무인증 목록 조회에 이어 같은 제출본에서 다른 사람(B)의 메모 한 건을 연속 조회합니다.
+    { attackId: 'anonymous_other_note_read', expected: '4단계: 토큰 없는 GET /api/notes/:id(B 메모)는 401, 메모 없음', observed: await sendRequest(otherNote) },
+    { attackId: 'forged_token_other_note_read', expected: '4단계: 서명 없는 가짜 토큰의 GET /api/notes/:id(B 메모)는 401, 메모 없음',
+      observed: await sendRequest(otherNote, { authorization: `Bearer ${unsignedToken(config)}` }) },
     { attackId: 'anonymous_api_note_create', expected: '3단계: 토큰 없는 POST /api/notes는 401', observed: await sendRequest(notes, { method: 'POST', body: probe }) },
     { attackId: 'anonymous_api_note_update', expected: '3단계: 토큰 없는 PUT /api/notes/:id는 401', observed: await sendRequest(item, { method: 'PUT', body: probe }) },
     { attackId: 'anonymous_api_note_delete', expected: '3단계: 토큰 없는 DELETE /api/notes/:id는 401', observed: await sendRequest(item, { method: 'DELETE' }) },
