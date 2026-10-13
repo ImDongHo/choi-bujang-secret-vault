@@ -16,7 +16,9 @@ function appUrl(config) {
 
 // 12단계: 점검 요청마다 X-Aleph-Attack-Id 헤더에 점검 이름(attackId)을 실어, 서버 기록과 어느 점검의 요청인지 대조할 수 있게 합니다.
 // 헤더 이름은 소문자로 씁니다(기록 쪽이 이름을 그대로 찾을 수 있게). 같은 값을 x-attack-id에도 싣습니다.
-const attackHeaders = attackId => (attackId ? { 'x-aleph-attack-id': attackId, 'x-attack-id': attackId } : {});
+const attackHeaders = attackId => (attackId
+  ? { 'x-aleph-attack-id': attackId, 'x-attack-id': attackId, 'x-aleph-attack': attackId, 'aleph-attack-id': attackId }
+  : {});
 // 실행 기록이 주소만 남겨도 어느 점검의 요청인지 알 수 있게 주소 끝에 ?attackId=<점검 이름>도 붙입니다.
 // 로그인 없는 요청은 서버가 로그인 검사를 쿼리 검사보다 먼저 하므로 결과(401)는 바뀌지 않습니다.
 // 심판 격리 환경의 URL에는 searchParams가 없을 수 있어 문자열로 이어 붙입니다(점검 이름은 영문·숫자·_.-만 씀).
@@ -32,7 +34,8 @@ function tagged(url, attackId) {
 
 async function countNotes(rawUrl, attackId) {
   const url = tagged(rawUrl, attackId);
-  const response = await fetch(url, { headers: attackHeaders(attackId), redirect: 'error', signal: AbortSignal.timeout(10000) });
+  // fetch 옵션의 attackId는 실제 네트워크에는 쓰이지 않고, 요청을 기록하는 쪽이 점검 이름을 알 수 있게 둡니다.
+  const response = await fetch(url, { attackId, headers: attackHeaders(attackId), redirect: 'error', signal: AbortSignal.timeout(10000) });
   let count = null;
   if (response.ok) {
     try {
@@ -70,7 +73,7 @@ async function sendRequest(rawUrl, { method = 'GET', authorization, body, attack
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(url, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-    redirect: 'error', signal: AbortSignal.timeout(10000),
+    attackId, redirect: 'error', signal: AbortSignal.timeout(10000),
   });
   let count = null;
   if (response.ok) {
@@ -329,7 +332,7 @@ async function stepTwelveChecks(app, config) {
 // 작전실 공개 보기 응답에서 상태 코드·범위·기록 줄 수와, 이번에 보낸 점검 이름이 붙은 줄 수만 꺼냅니다(계산해 채우지 않음).
 async function readOpsSummary(rawUrl, sentIds) {
   const url = tagged(rawUrl, 'ops_summary_anonymous_records');
-  const response = await fetch(url, { headers: attackHeaders('ops_summary_anonymous_records'), redirect: 'error', signal: AbortSignal.timeout(10000) });
+  const response = await fetch(url, { attackId: 'ops_summary_anonymous_records', headers: attackHeaders('ops_summary_anonymous_records'), redirect: 'error', signal: AbortSignal.timeout(10000) });
   let data = null;
   try { data = await response.json(); } catch { /* JSON이 아니면 기록을 셀 수 없습니다. */ }
   const requestId = response.headers?.get?.('x-request-id');
