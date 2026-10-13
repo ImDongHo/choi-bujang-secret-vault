@@ -490,7 +490,7 @@
       const recoveryLines = [
         isConfirmed(recovery.policy) ? `안전 정책 사본: ${recovery.policy.version} (해시 검증 통과, ${recovery.policy.sha256Prefix}…)` : `안전 정책 사본: ${notRunText(recovery.policy)}`,
         isConfirmed(recovery.backups) ? `내 메모 사본: ${recovery.backups.count}건 · 마지막 사본 ${localTime(recovery.backups.latestAt)}` : `내 메모 사본: ${notRunText(recovery.backups)}`,
-        isConfirmed(recovery.restores) ? `내 복원 기록: ${recovery.restores.count}건 · 마지막 ${recovery.restores.latestAction ?? '없음'} ${localTime(recovery.restores.latestAt)}` : `내 복원 기록: ${notRunText(recovery.restores)}`,
+        isConfirmed(recovery.restores) ? `내 복원 기록: ${recovery.restores.count}건${recovery.restores.count ? ` · 마지막 ${recovery.restores.latestAction} ${localTime(recovery.restores.latestAt)}` : ''}` : `내 복원 기록: ${notRunText(recovery.restores)}`,
       ];
       const recoveryOk = [recovery.policy, recovery.backups, recovery.restores].every(isConfirmed);
       cards.push(opsCard('recovery', recoveryLines, recoveryOk ? 'confirmed' : 'not_run'));
@@ -549,10 +549,10 @@
       const errorOf = result => (typeof result.data?.error === 'string' ? ` ${result.data.error}` : '');
       const expectStatus = (status, error) => result => result.status === status && (!error || result.data?.error === error);
       return [
-        { step: '2', kind: '금지', label: 'GET /data.json (비로그인 공개 파일)', expected: '200 · 메모 0건',
+        { step: '2', kind: '금지', label: 'GET /data.json (비로그인 공개 파일)', expected: '404 또는 200 · 메모 0건',
           run: () => probe('/data.json', { auth: 'none' }),
-          describe: r => `HTTP ${r.status} · 메모 ${Array.isArray(r.data?.notes) ? r.data.notes.length : '항목 없음'}건`,
-          ok: r => r.status === 200 && (!Array.isArray(r.data?.notes) || r.data.notes.length === 0) },
+          describe: r => `HTTP ${r.status}${Array.isArray(r.data?.notes) ? ` · 메모 ${r.data.notes.length}건` : ' · 메모 목록 없음'}`,
+          ok: r => r.status === 404 || (r.status === 200 && (!Array.isArray(r.data?.notes) || r.data.notes.length === 0)) },
         { step: '3', kind: '금지', label: 'GET /api/notes (토큰 없음)', expected: '401', run: () => probe('/api/notes', { auth: 'none' }), ok: expectStatus(401) },
         { step: '3', kind: '금지', label: 'GET /api/notes (위조 토큰)', expected: '401', run: () => probe('/api/notes', { auth: 'forged' }), ok: expectStatus(401) },
         { step: '3', kind: '정상', label: 'GET /api/notes (내 메모 목록)', expected: '200',
