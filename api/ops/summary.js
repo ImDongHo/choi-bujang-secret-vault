@@ -8,12 +8,11 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { RULE_IDS } from '../../src/decider.mjs';
-import { detect } from '../../src/detect.mjs';
 import { deviceStatus, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, restTable } from '../../src/notes-api.mjs';
 import { maskSubject, withOpsEvents } from '../../src/ops-events.mjs';
 
 const WINDOW_HOURS = 24;
-const EVENT_LIMIT = 1000;
+const EVENT_LIMIT = 200;
 // src/detect.mjs가 돌려주는 탐지 규칙 이름(reasonCode)입니다.
 const DETECT_RULE_IDS = Object.freeze(['burst_read']);
 
@@ -40,37 +39,40 @@ function safePolicy() {
   }
 }
 
+// 각 항목은 가린 서버 기록(records)과 그 기록에서 센 수치만 돌려줍니다. 수치는 언제나 records 길이·분류와 같습니다.
+// 기록에 없는 값(엔진의 판정·회수 결과, 추정 상태)은 계산해서 채우지 않습니다.
 async function eventsSection(ctx) {
   const since = new Date(Date.now() - WINDOW_HOURS * 3600 * 1000).toISOString();
   const result = await restTable(ctx, 'ops_events', { query: {
-    select: 'request_id,at,method,route,status,outcome,reason',
+    select: 'request_id,at,route,status,outcome,reason',
     owner_id: `eq.${ctx.userId}`, at: `gte.${since}`, order: 'at.desc', limit: String(EVENT_LIMIT),
   } });
-  if (!result.ok || !Array.isArray(result.data)) return notRun(result.code === '42P01' || result.status === 404 ? 'OPS_EVENTS_TABLE_MISSING' : 'OPS_EVENTS_UNREADABLE');
-  const rows = result.data;
-  const counts = { allowed: 0, denied: 0, error: 0 };
-  for (const row of rows) if (Object.hasOwn(counts, row.outcome)) counts[row.outcome] += 1;
+  if (!result.ok || !Array.isArray(result.data)) return notRun(result.status === 404 ? 'OPS_EVENTS_TABLE_MISSING' : 'OPS_EVENTS_UNREADABLE');
+  const records = result.data.map(row => ({
+    requestId: row.request_id, at: row.at, route: row.route, status: row.status, outcome: row.outcome, reason: row.reason || '',
+  }));
+  const count = outcome => records.filter(row => row.outcome === outcome).length;
   const reasons = {};
-  for (const row of rows) if (row.outcome !== 'allowed' && row.reason) reasons[row.reason] = (reasons[row.reason] ?? 0) + 1;
-  const detection = detect(rows.map(row => ({ identity: { sub: ctx.userId }, method: row.method, at: row.at })));
+  for (const row of records) if (row.outcome !== 'allowed' && row.reason) reasons[row.reason] = (reasons[row.reason] ?? 0) + 1;
   return {
-    status: 'confirmed', windowHours: WINDOW_HOURS, total: rows.length, truncated: rows.length >= EVENT_LIMIT, ...counts,
-    reasons,
-    detection: { action: detection.action, reasonCode: detection.reasonCode ?? null, rules: DETECT_RULE_IDS },
-    recentDenied: rows.filter(row => row.outcome !== 'allowed').slice(0, 10).map(row => ({
-      requestId: row.request_id, at: row.at, method: row.method, route: row.route, status: row.status, reason: row.reason,
-    })),
+    status: 'confirmed', source: 'public.ops_events', windowHours: WINDOW_HOURS, limit: EVENT_LIMIT,
+    truncated: records.length >= EVENT_LIMIT,
+    total: records.length, allowed: count('allowed'), denied: count('denied'), error: count('error'), reasons, records,
   };
 }
 
+// 회수 상태는 학습 DB의 기기 승인 기록만 셉니다. 심판 토큰처럼 이 서버가 기기를 등록하지 않은 요청은 기록이 없으므로 미실행입니다.
 async function devicesSection(ctx, request) {
-  const result = await restTable(ctx, 'device_registrations', { query: { select: 'status', owner_id: `eq.${ctx.userId}` } });
+  if (ctx.kind !== 'student') return notRun('DEVICE_CHECKED_BY_ENGINE');
+  const result = await restTable(ctx, 'device_registrations', { query: {
+    select: 'status,requested_at,approved_at', owner_id: `eq.${ctx.userId}`, order: 'requested_at.desc',
+  } });
   if (!result.ok || !Array.isArray(result.data)) return notRun('DEVICES_UNREADABLE');
-  const counts = { approved: 0, pending: 0, revoked: 0 };
-  for (const row of result.data) if (Object.hasOwn(counts, row.status)) counts[row.status] += 1;
-  let current = 'unknown';
-  try { current = (await deviceStatus(ctx, request)).status; } catch { /* 목록 수치는 그대로 둡니다 */ }
-  return { status: 'confirmed', currentDevice: ctx.kind === 'student' ? current : 'engine_checked', ...counts };
+  const records = result.data.map(row => ({ status: row.status, requestedAt: row.requested_at, approvedAt: row.approved_at ?? null }));
+  const count = status => records.filter(row => row.status === status).length;
+  const current = (await deviceStatus(ctx, request)).status;
+  return { status: 'confirmed', source: 'public.device_registrations', currentDevice: current,
+    total: records.length, approved: count('approved'), pending: count('pending'), revoked: count('revoked'), records };
 }
 
 async function recoverySection(ctx) {
@@ -79,13 +81,15 @@ async function recoverySection(ctx) {
   const audits = await restTable(ctx, 'notes_restore_audit', { query: {
     select: 'action,restored_at', restored_by: `eq.${ctx.userId}`, order: 'restored_at.desc', limit: '100',
   } });
+  const backupRecords = backups.ok && Array.isArray(backups.data) ? backups.data.map(row => ({ backedUpAt: row.backed_up_at })) : null;
+  const restoreRecords = audits.ok && Array.isArray(audits.data) ? audits.data.map(row => ({ action: row.action, restoredAt: row.restored_at })) : null;
   return {
     policy,
-    backups: backups.ok && Array.isArray(backups.data)
-      ? { status: 'confirmed', count: backups.data.length, latestAt: backups.data[0]?.backed_up_at ?? null }
+    backups: backupRecords
+      ? { status: 'confirmed', source: 'public.notes_backup', count: backupRecords.length, records: backupRecords }
       : notRun('BACKUP_UNREADABLE'),
-    restores: audits.ok && Array.isArray(audits.data)
-      ? { status: 'confirmed', count: audits.data.length, latestAt: audits.data[0]?.restored_at ?? null, latestAction: audits.data[0]?.action ?? null }
+    restores: restoreRecords
+      ? { status: 'confirmed', source: 'public.notes_restore_audit', count: restoreRecords.length, records: restoreRecords }
       : notRun('RESTORE_AUDIT_UNREADABLE'),
   };
 }
@@ -105,7 +109,8 @@ async function handler(request, response) {
   const summary = {
     requestId: response.getHeader('X-Request-Id') ?? null,
     checkedAt: new Date().toISOString(),
-    rules: { status: 'confirmed', decider: [...RULE_IDS], detect: [...DETECT_RULE_IDS] },
+    subject: maskSubject(ctx.userId),
+    rules: { status: 'confirmed', source: 'src/decider.mjs RULE_IDS · src/detect.mjs', decider: [...RULE_IDS], detect: [...DETECT_RULE_IDS] },
     events, devices, recovery,
   };
   const n = section => (section?.status === 'confirmed' ? section : null);
@@ -114,10 +119,10 @@ async function handler(request, response) {
   const b = n(recovery?.backups);
   const r = n(recovery?.restores);
   const p = n(recovery?.policy);
-  console.info(`ops summary req=${summary.requestId} sub=${maskSubject(ctx.userId)} rules=${RULE_IDS.length}+${DETECT_RULE_IDS.length}`
-    + ` events=${e ? `${e.total}(allowed=${e.allowed},denied=${e.denied},error=${e.error})` : 'not_run'}`
-    + ` detect=${e ? e.detection.action : 'not_run'}`
-    + ` devices=${d ? `approved=${d.approved},pending=${d.pending},revoked=${d.revoked}` : 'not_run'}`
+  // 화면과 같은 수치를 사용자 ID를 가린 한 줄로 남깁니다(가린 서버 기록). 읽지 못한 항목은 not_run으로 적습니다.
+  console.info(`ops summary req=${summary.requestId} sub=${summary.subject} rules=${RULE_IDS.length}+${DETECT_RULE_IDS.length}`
+    + ` events=${e ? `${e.total}(allowed=${e.allowed},denied=${e.denied},error=${e.error})` : `not_run(${events.reason})`}`
+    + ` devices=${d ? `${d.total}(approved=${d.approved},pending=${d.pending},revoked=${d.revoked})` : `not_run(${devices.reason})`}`
     + ` backups=${b ? b.count : 'not_run'} restores=${r ? r.count : 'not_run'} policy=${p ? p.version : 'not_run'}`);
   return response.status(200).json(summary);
 }

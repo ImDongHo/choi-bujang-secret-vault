@@ -47,6 +47,7 @@
     .badge[data-kind="confirmed"], .badge[data-kind="match"] { background: #8ad8df; color: #101a28; }
     .badge[data-kind="not_run"] { background: #2c405a; color: #ecf4ff; }
     .badge[data-kind="mismatch"] { background: #d07384; color: #101a28; }
+    details summary { cursor: pointer; color: #8ad8df; font-size: 14px; margin-top: 6px; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border-bottom: 1px solid #2c405a; padding: 6px 5px; text-align: left; vertical-align: top; }
@@ -450,50 +451,79 @@
       opsCards.replaceChildren(...Object.keys(OPS_TITLES).map(key => opsCard(key, ['미실행: 아직 서버에 요청하지 않았습니다.'], 'not_run')));
     }
 
+    // 서버가 보낸 가린 기록(records)을 화면이 다시 세어 서버 수치와 비교합니다. 다르면 「불일치」로 표시하고 수치를 고쳐 쓰지 않습니다.
+    function recordsTable(caption, columns, records) {
+      const wrap = el('details');
+      wrap.append(el('summary', `${caption} ${records.length}줄 보기`));
+      const box = el('div', undefined, { class: 'table-wrap' });
+      const table = el('table');
+      const head = el('tr');
+      for (const [name] of columns) head.append(el('th', name));
+      table.append(head);
+      for (const row of records) {
+        const tr = el('tr');
+        for (const [, pick] of columns) tr.append(el('td', pick(row)));
+        table.append(tr);
+      }
+      box.append(table);
+      wrap.append(box);
+      return wrap;
+    }
+
+    function checkedCard(key, lines, section, pairs, table) {
+      const same = pairs.every(([server, counted]) => server === counted);
+      const card = opsCard(key, lines, same ? 'confirmed' : 'mismatch');
+      if (!same) card.append(el('p', `불일치: 서버 수치와 기록 줄 수가 다릅니다(${pairs.map(([a, b]) => `${a}≠${b}`).filter((_, i) => pairs[i][0] !== pairs[i][1]).join(', ')}).`));
+      if (table) card.append(table);
+      return card;
+    }
+
     function renderOps(data) {
-      opsMeta.textContent = `서버 응답 요청 ID ${data.requestId ?? '없음'} · 확인 시각 ${localTime(data.checkedAt)}`;
+      opsMeta.textContent = `서버 응답 요청 ID ${data.requestId ?? '없음'} · 가린 사용자 ${data.subject ?? '-'} · 확인 시각 ${localTime(data.checkedAt)}`;
       const cards = [];
       const rules = data.rules;
       cards.push(isConfirmed(rules)
         ? opsCard('rules', [`판정기 규칙 ${rules.decider.length}개: ${rules.decider.join(', ')}`, `탐지 규칙 ${rules.detect.length}개: ${rules.detect.join(', ')}`], 'confirmed')
         : opsCard('rules', [notRunText(rules)], 'not_run'));
+
       const events = data.events;
-      if (isConfirmed(events)) {
-        const lines = [
-          `기록 ${events.total}건${events.truncated ? '(최근 1000건까지만 셈)' : ''} · 허용 ${events.allowed} · 거부 ${events.denied} · 오류 ${events.error}`,
-          `탐지 결과(burst_read): ${events.detection.action === 'propose_revocation' ? '회수 제안' : '관찰(제안 없음)'}`,
+      if (isConfirmed(events) && Array.isArray(events.records)) {
+        const rows = events.records;
+        const counted = outcome => rows.filter(row => row.outcome === outcome).length;
+        cards.push(checkedCard('events', [
+          `서버 기록 ${rows.length}줄${events.truncated ? `(최근 ${events.limit}줄까지만)` : ''} · 허용 ${counted('allowed')} · 거부 ${counted('denied')} · 오류 ${counted('error')}`,
           `거부 사유: ${Object.entries(events.reasons).map(([code, count]) => `${code} ${count}`).join(', ') || '없음'}`,
-        ];
-        const card = opsCard('events', lines, 'confirmed');
-        if (events.recentDenied.length) {
-          const table = el('table');
-          const head = el('tr');
-          for (const name of ['시각', '요청', '상태', '사유', '요청 ID']) head.append(el('th', name));
-          table.append(head);
-          for (const row of events.recentDenied) {
-            const tr = el('tr');
-            const id = el('td'); id.append(el('code', row.requestId));
-            tr.append(el('td', localTime(row.at)), el('td', row.route), el('td', String(row.status)), el('td', row.reason || '-'), id);
-            table.append(tr);
-          }
-          const wrap = el('div', undefined, { class: 'table-wrap' });
-          wrap.append(el('p', '최근 거부 기록(가린 서버 기록, 최대 10건)'), table);
-          card.append(wrap);
-        }
-        cards.push(card);
+        ], events, [[events.total, rows.length], [events.allowed, counted('allowed')], [events.denied, counted('denied')], [events.error, counted('error')]],
+        recordsTable('가린 서버 기록', [['시각', row => localTime(row.at)], ['요청', row => row.route], ['상태', row => String(row.status)], ['결과', row => row.outcome], ['사유', row => row.reason || '-'], ['요청 ID', row => row.requestId]], rows)));
       } else cards.push(opsCard('events', [notRunText(events)], 'not_run'));
+
       const devices = data.devices;
-      cards.push(isConfirmed(devices)
-        ? opsCard('devices', [`이 기기: ${DEVICE_TEXT[devices.currentDevice] ?? devices.currentDevice}`, `승인 ${devices.approved} · 대기 ${devices.pending} · 회수됨 ${devices.revoked}`], 'confirmed')
-        : opsCard('devices', [notRunText(devices)], 'not_run'));
+      if (isConfirmed(devices) && Array.isArray(devices.records)) {
+        const rows = devices.records;
+        const counted = status => rows.filter(row => row.status === status).length;
+        cards.push(checkedCard('devices', [
+          `이 기기: ${DEVICE_TEXT[devices.currentDevice] ?? devices.currentDevice}`,
+          `기기 기록 ${rows.length}줄 · 승인 ${counted('approved')} · 대기 ${counted('pending')} · 회수됨 ${counted('revoked')}`,
+        ], devices, [[devices.total, rows.length], [devices.approved, counted('approved')], [devices.pending, counted('pending')], [devices.revoked, counted('revoked')]],
+        recordsTable('기기 승인 기록', [['상태', row => row.status], ['요청 시각', row => localTime(row.requestedAt)], ['승인 시각', row => localTime(row.approvedAt)]], rows)));
+      } else cards.push(opsCard('devices', [notRunText(devices)], 'not_run'));
+
       const recovery = data.recovery ?? {};
-      const recoveryLines = [
-        isConfirmed(recovery.policy) ? `안전 정책 사본: ${recovery.policy.version} (해시 검증 통과, ${recovery.policy.sha256Prefix}…)` : `안전 정책 사본: ${notRunText(recovery.policy)}`,
-        isConfirmed(recovery.backups) ? `내 메모 사본: ${recovery.backups.count}건 · 마지막 사본 ${localTime(recovery.backups.latestAt)}` : `내 메모 사본: ${notRunText(recovery.backups)}`,
-        isConfirmed(recovery.restores) ? `내 복원 기록: ${recovery.restores.count}건${recovery.restores.count ? ` · 마지막 ${recovery.restores.latestAction} ${localTime(recovery.restores.latestAt)}` : ''}` : `내 복원 기록: ${notRunText(recovery.restores)}`,
-      ];
-      const recoveryOk = [recovery.policy, recovery.backups, recovery.restores].every(isConfirmed);
-      cards.push(opsCard('recovery', recoveryLines, recoveryOk ? 'confirmed' : 'not_run'));
+      const lines = [];
+      const pairs = [];
+      let table;
+      lines.push(isConfirmed(recovery.policy) ? `안전 정책 사본: ${recovery.policy.version} (해시 검증 통과, ${recovery.policy.sha256Prefix}…)` : `안전 정책 사본: ${notRunText(recovery.policy)}`);
+      if (isConfirmed(recovery.backups) && Array.isArray(recovery.backups.records)) {
+        lines.push(`내 메모 사본: ${recovery.backups.records.length}줄`);
+        pairs.push([recovery.backups.count, recovery.backups.records.length]);
+      } else lines.push(`내 메모 사본: ${notRunText(recovery.backups)}`);
+      if (isConfirmed(recovery.restores) && Array.isArray(recovery.restores.records)) {
+        lines.push(`내 복원 기록: ${recovery.restores.records.length}줄`);
+        pairs.push([recovery.restores.count, recovery.restores.records.length]);
+        if (recovery.restores.records.length) table = recordsTable('복원 감사 기록', [['동작', row => row.action], ['시각', row => localTime(row.restoredAt)]], recovery.restores.records);
+      } else lines.push(`내 복원 기록: ${notRunText(recovery.restores)}`);
+      const allRead = [recovery.policy, recovery.backups, recovery.restores].every(isConfirmed);
+      cards.push(allRead ? checkedCard('recovery', lines, recovery, pairs, table) : opsCard('recovery', lines, 'not_run'));
       opsCards.replaceChildren(...cards);
     }
 

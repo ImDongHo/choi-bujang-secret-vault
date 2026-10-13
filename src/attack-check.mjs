@@ -70,7 +70,9 @@ async function sendRequest(url, { method = 'GET', authorization, body } = {}) {
 }
 
 function unsignedToken(config) {
-  const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  // 심판의 실행 환경에는 Node 전용 Buffer가 없을 수 있어 표준 TextEncoder·btoa로 base64url을 만듭니다.
+  const part = value => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))))
+    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
   const now = Math.floor(Date.now() / 1000);
   return `${part({ alg: 'none', typ: 'JWT' })}.${part({
     iss: config.identityProvider?.issuer, aud: config.identityProvider?.audience,
@@ -108,7 +110,7 @@ async function stepThreeChecks(app, config) {
 // 4단계: anon(공개) 키로 Supabase Data API를 직접 불러 메모 테이블이 막혔는지 봅니다.
 // 11단계: 키 값은 코드·Git에 두지 않고, npm run bundle을 실행할 때 환경변수 SUPABASE_PUBLISHABLE_KEY로만 받습니다.
 // 값이 없으면 이 점검은 보내지 않고 미실행으로 남깁니다. 서버 전용 키는 쓰지 않습니다.
-const PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? '';
+const PUBLISHABLE_KEY = globalThis.process?.env?.SUPABASE_PUBLISHABLE_KEY ?? '';
 
 async function sendDataApi(config, { method = 'GET', body } = {}) {
   if (!PUBLISHABLE_KEY) return '미실행: SUPABASE_PUBLISHABLE_KEY 환경변수가 없어 보내지 않음';
