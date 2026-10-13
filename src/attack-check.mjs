@@ -19,11 +19,11 @@ function appUrl(config) {
 const attackHeaders = attackId => (attackId ? { 'x-aleph-attack-id': attackId, 'x-attack-id': attackId } : {});
 // 실행 기록이 주소만 남겨도 어느 점검의 요청인지 알 수 있게 주소 끝에 ?attackId=<점검 이름>도 붙입니다.
 // 로그인 없는 요청은 서버가 로그인 검사를 쿼리 검사보다 먼저 하므로 결과(401)는 바뀌지 않습니다.
+// 심판 격리 환경의 URL에는 searchParams가 없을 수 있어 문자열로 이어 붙입니다(점검 이름은 영문·숫자·_.-만 씀).
 function tagged(url, attackId) {
   if (!attackId) return url;
-  const next = new URL(url.href);
-  next.searchParams.set('attackId', attackId);
-  return next;
+  const href = String(url.href ?? url);
+  return new URL(`${href}${href.includes('?') ? '&' : '?'}attackId=${encodeURIComponent(attackId)}`);
 }
 
 async function countNotes(rawUrl, attackId) {
