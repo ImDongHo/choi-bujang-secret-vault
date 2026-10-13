@@ -11,6 +11,9 @@ const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.me
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 let verifyLogin;
 
+// 12단계: 로그인 검사를 통과한 사용자 ID를 작전실 서버 기록(src/ops-events.mjs)에 넘기는 자리입니다. 브라우저 값은 쓰지 않습니다.
+export const OPS_USER = Symbol.for('byteback.opsUser');
+
 export const isUuid = value => typeof value === 'string' && UUID.test(value);
 
 export function toNote(row) {
@@ -70,6 +73,7 @@ export async function requireLogin(request, response, allow) {
     response.status(401).json({ error: 'LOGIN_REQUIRED' });
     return null;
   }
+  request[OPS_USER] = login.userId;
   return { userId: login.userId, kind: login.kind, url, key };
 }
 
@@ -99,7 +103,7 @@ export function notesTable(ctx, options) {
   return restTable(ctx, 'notes', options);
 }
 
-const TABLES = new Set(['notes', 'notices', 'instructors', 'notes_backup', 'notes_restore_audit', 'device_registrations']);
+const TABLES = new Set(['notes', 'notices', 'instructors', 'notes_backup', 'notes_restore_audit', 'device_registrations', 'ops_events']);
 export async function restTable(ctx, table, { method = 'GET', query = {}, body, prefer } = {}) {
   if (!TABLES.has(table)) throw new TypeError('unknown_table');
   const endpoint = new URL(`/rest/v1/${table}`, ctx.url);

@@ -3,10 +3,11 @@
 // 화면 메뉴나 요청 본문의 role·isInstructor 같은 값은 믿지 않고, 검증된 사용자 ID로만 강사 여부를 대조합니다.
 // 거부할 때는 자원 ID와 짧은 사유만 기록합니다.
 import { isInstructor, isUuid, logDenied, readNoteInput, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, restTable, toNote, unavailable } from '../../src/notes-api.mjs';
+import { withOpsEvents } from '../../src/ops-events.mjs';
 
 const notFound = response => response.status(404).json({ error: 'NOTICE_NOT_FOUND' });
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'PUT']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
@@ -43,3 +44,6 @@ export default async function handler(request, response) {
     return unavailable(response);
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다.
+export default withOpsEvents('notices', request => `${request.method} /api/notices/:id`, handler);

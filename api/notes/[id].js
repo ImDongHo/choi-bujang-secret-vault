@@ -3,12 +3,13 @@
 // 4단계: DB 조회·수정·삭제 조건에 owner_id = 검증된 사용자 ID를 항상 붙입니다.
 // URL·본문의 owner_id는 믿지 않으며, 남의 메모나 없는 메모는 똑같이 404로 거부합니다(존재 여부를 알리지 않음).
 import { claimsOtherOwner, isUuid, logDenied, notesTable, readNoteInput, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, toNote, unavailable } from '../../src/notes-api.mjs';
+import { withOpsEvents } from '../../src/ops-events.mjs';
 
 const notFound = response => response.status(404).json({ error: 'NOTE_NOT_FOUND' });
 // 8단계: 남의 메모·없는 메모는 같은 404로 답하되, 서버 기록에는 자원 ID와 짧은 사유를 남깁니다.
 const denied = (response, id, reason) => { logDenied(resourceId('notes', id), reason); return notFound(response); };
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'PUT', 'DELETE']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
@@ -60,3 +61,6 @@ export default async function handler(request, response) {
     return unavailable(response);
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다.
+export default withOpsEvents('notes', request => `${request.method} /api/notes/:id`, handler);

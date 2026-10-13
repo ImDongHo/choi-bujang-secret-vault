@@ -5,8 +5,9 @@
 // 브라우저가 보낸 owner_id·userId·role은 소유자로 쓰지 않습니다.
 import { randomUUID } from 'node:crypto';
 import { claimsOtherOwner, isUuid, notesTable, readNoteInput, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, toNote, unavailable } from '../../src/notes-api.mjs';
+import { withOpsEvents } from '../../src/ops-events.mjs';
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'POST']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, [])) return;
@@ -42,3 +43,6 @@ export default async function handler(request, response) {
     return unavailable(response);
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다.
+export default withOpsEvents('notes', request => `${request.method} /api/notes`, handler);

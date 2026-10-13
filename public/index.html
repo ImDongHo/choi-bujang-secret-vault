@@ -39,6 +39,18 @@
     .device-state[data-state="approved"] { color: #8ad8df; }
     .device-state[data-state="pending"], .device-state[data-state="none"], .device-state[data-state="revoked"] { color: #ffd38a; }
     .hint { font-size: 15px; color: #9fb3c8; }
+    .ops-grid { display: grid; gap: 12px; }
+    .ops-card { border: 1px solid #51667c; border-radius: 12px; padding: 12px 14px; background: #101a28; }
+    .ops-card h3 { margin: 0 0 6px; font-size: 16px; }
+    .ops-card p { margin: 4px 0; font-size: 15px; }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+    .badge[data-kind="confirmed"], .badge[data-kind="match"] { background: #8ad8df; color: #101a28; }
+    .badge[data-kind="not_run"] { background: #2c405a; color: #ecf4ff; }
+    .badge[data-kind="mismatch"] { background: #d07384; color: #101a28; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #2c405a; padding: 6px 5px; text-align: left; vertical-align: top; }
+    td code { font-size: 12px; word-break: break-all; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -82,6 +94,27 @@
       <div id="note-error" class="error" role="alert"></div>
     </section>
     <ul id="notes" aria-live="polite"><li>로그인 상태를 확인하는 중입니다.</li></ul>
+    <section class="panel" id="ops" aria-labelledby="ops-title" hidden>
+      <h2 id="ops-title">탈환 작전실</h2>
+      <p class="hint">서버 함수 <code>GET /api/ops/summary</code>가 실제로 돌려준 값만 「확인됨」으로 표시합니다. 서버에 묻지 않았거나 서버가 읽지 못한 항목은 「미실행」입니다. 메모 제목·본문은 표시하지 않습니다. 아래 요청 ID로 서버 로그의 <code>ops summary req=…</code> 한 줄(사용자 ID는 가림)과 수치를 대조할 수 있습니다.</p>
+      <div class="buttons"><button type="button" id="ops-refresh">작전실 요약 불러오기</button></div>
+      <p id="ops-meta" class="hint" aria-live="polite">미실행: 아직 서버에 요청하지 않았습니다.</p>
+      <div class="ops-grid" id="ops-cards"></div>
+      <div id="ops-error" class="error" role="alert"></div>
+    </section>
+    <section class="panel" id="trials" aria-labelledby="trials-title" hidden>
+      <h2 id="trials-title">1~11단계 정상·금지 요청 실측 표</h2>
+      <p class="hint">버튼을 누르면 이 브라우저가 지금 배포된 API에 요청을 실제로 보내고, 받은 상태 코드·오류 코드·요청 ID·확인 시각을 표에 적습니다. 보내지 않은 시험은 「미실행」으로 남깁니다. 심판의 41종 시험은 이 표가 실행하지 않으므로 통과로 적지 않습니다. 점검용 임시 메모 한 건을 만들었다가 마지막에 지웁니다.</p>
+      <div class="buttons">
+        <button type="button" id="trials-run">실측 표 만들기</button>
+        <button type="button" id="trials-download" class="secondary" disabled>표 내려받기(CSV)</button>
+      </div>
+      <p id="trials-meta" class="hint" aria-live="polite">미실행: 아직 요청을 보내지 않았습니다.</p>
+      <div class="table-wrap"><table id="trials-table" hidden>
+        <thead><tr><th>단계</th><th>구분</th><th>요청</th><th>기대 결과</th><th>실제 API 결과</th><th>판정</th><th>요청 ID</th><th>확인 시각</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
   </main>
   <script type="module">
     // 3단계: 이메일·비밀번호 로그인·로그아웃. 5단계부터는 화면 코드에 Supabase 키를 두지 않고
@@ -117,6 +150,16 @@
       unknown: '확인하는 중', none: '승인 요청 전', pending: '승인 대기 중(관리자 승인 필요)',
       approved: '승인된 등록 기기', revoked: '승인이 회수됨(다시 요청 필요)',
     };
+    const opsPanel = document.querySelector('#ops');
+    const opsRefresh = document.querySelector('#ops-refresh');
+    const opsMeta = document.querySelector('#ops-meta');
+    const opsCards = document.querySelector('#ops-cards');
+    const opsError = document.querySelector('#ops-error');
+    const trialsPanel = document.querySelector('#trials');
+    const trialsRun = document.querySelector('#trials-run');
+    const trialsDownload = document.querySelector('#trials-download');
+    const trialsMeta = document.querySelector('#trials-meta');
+    const trialsTable = document.querySelector('#trials-table');
     let session = null;
     let editingId = null;
     let notesRequest = 0;
@@ -335,6 +378,9 @@
       logout.hidden = !signedIn;
       devicePanel.hidden = !signedIn;
       editor.hidden = !(signedIn && deviceState === 'approved');
+      opsPanel.hidden = !(signedIn && deviceState === 'approved');
+      trialsPanel.hidden = !(signedIn && deviceState === 'approved');
+      if (!signedIn) { resetOps(); resetTrials(); }
       if (!signedIn || deviceState !== 'approved') resetEditor();
     }
 
@@ -375,6 +421,220 @@
       logout.disabled = false;
     });
 
+    // ---- 12단계 만들기 1: 탈환 작전실 ----
+    // 서버가 돌려준 값만 확인됨으로 쓰고, 없거나 읽지 못한 항목은 미실행으로 둡니다. 화면에서 수치를 지어내지 않습니다.
+    const OPS_TITLES = { rules: '판정기·탐지 규칙', events: '탐지 사건(최근 24시간, 내 요청)', devices: '회수 상태(내 기기)', recovery: '복구 버전' };
+
+    function el(tag, text, attrs = {}) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+      return node;
+    }
+    const badge = kind => el('span', kind === 'confirmed' ? '확인됨' : kind === 'match' ? '일치' : kind === 'mismatch' ? '불일치' : '미실행', { class: 'badge', 'data-kind': kind });
+    const isConfirmed = section => section?.status === 'confirmed';
+    const notRunText = section => `미실행: 서버가 이 항목을 읽지 못했습니다(${section?.reason ?? '응답 없음'}).`;
+    const localTime = iso => (iso ? new Date(iso).toLocaleString('ko-KR') : '없음');
+
+    function opsCard(key, lines, status) {
+      const card = el('div', undefined, { class: 'ops-card', 'data-section': key });
+      const title = el('h3', `${OPS_TITLES[key]} `);
+      title.append(badge(status));
+      card.append(title, ...lines.map(line => el('p', line)));
+      return card;
+    }
+
+    function resetOps() {
+      opsMeta.textContent = '미실행: 아직 서버에 요청하지 않았습니다.';
+      opsError.textContent = '';
+      opsCards.replaceChildren(...Object.keys(OPS_TITLES).map(key => opsCard(key, ['미실행: 아직 서버에 요청하지 않았습니다.'], 'not_run')));
+    }
+
+    function renderOps(data) {
+      opsMeta.textContent = `서버 응답 요청 ID ${data.requestId ?? '없음'} · 확인 시각 ${localTime(data.checkedAt)}`;
+      const cards = [];
+      const rules = data.rules;
+      cards.push(isConfirmed(rules)
+        ? opsCard('rules', [`판정기 규칙 ${rules.decider.length}개: ${rules.decider.join(', ')}`, `탐지 규칙 ${rules.detect.length}개: ${rules.detect.join(', ')}`], 'confirmed')
+        : opsCard('rules', [notRunText(rules)], 'not_run'));
+      const events = data.events;
+      if (isConfirmed(events)) {
+        const lines = [
+          `기록 ${events.total}건${events.truncated ? '(최근 1000건까지만 셈)' : ''} · 허용 ${events.allowed} · 거부 ${events.denied} · 오류 ${events.error}`,
+          `탐지 결과(burst_read): ${events.detection.action === 'propose_revocation' ? '회수 제안' : '관찰(제안 없음)'}`,
+          `거부 사유: ${Object.entries(events.reasons).map(([code, count]) => `${code} ${count}`).join(', ') || '없음'}`,
+        ];
+        const card = opsCard('events', lines, 'confirmed');
+        if (events.recentDenied.length) {
+          const table = el('table');
+          const head = el('tr');
+          for (const name of ['시각', '요청', '상태', '사유', '요청 ID']) head.append(el('th', name));
+          table.append(head);
+          for (const row of events.recentDenied) {
+            const tr = el('tr');
+            const id = el('td'); id.append(el('code', row.requestId));
+            tr.append(el('td', localTime(row.at)), el('td', row.route), el('td', String(row.status)), el('td', row.reason || '-'), id);
+            table.append(tr);
+          }
+          const wrap = el('div', undefined, { class: 'table-wrap' });
+          wrap.append(el('p', '최근 거부 기록(가린 서버 기록, 최대 10건)'), table);
+          card.append(wrap);
+        }
+        cards.push(card);
+      } else cards.push(opsCard('events', [notRunText(events)], 'not_run'));
+      const devices = data.devices;
+      cards.push(isConfirmed(devices)
+        ? opsCard('devices', [`이 기기: ${DEVICE_TEXT[devices.currentDevice] ?? devices.currentDevice}`, `승인 ${devices.approved} · 대기 ${devices.pending} · 회수됨 ${devices.revoked}`], 'confirmed')
+        : opsCard('devices', [notRunText(devices)], 'not_run'));
+      const recovery = data.recovery ?? {};
+      const recoveryLines = [
+        isConfirmed(recovery.policy) ? `안전 정책 사본: ${recovery.policy.version} (해시 검증 통과, ${recovery.policy.sha256Prefix}…)` : `안전 정책 사본: ${notRunText(recovery.policy)}`,
+        isConfirmed(recovery.backups) ? `내 메모 사본: ${recovery.backups.count}건 · 마지막 사본 ${localTime(recovery.backups.latestAt)}` : `내 메모 사본: ${notRunText(recovery.backups)}`,
+        isConfirmed(recovery.restores) ? `내 복원 기록: ${recovery.restores.count}건 · 마지막 ${recovery.restores.latestAction ?? '없음'} ${localTime(recovery.restores.latestAt)}` : `내 복원 기록: ${notRunText(recovery.restores)}`,
+      ];
+      const recoveryOk = [recovery.policy, recovery.backups, recovery.restores].every(isConfirmed);
+      cards.push(opsCard('recovery', recoveryLines, recoveryOk ? 'confirmed' : 'not_run'));
+      opsCards.replaceChildren(...cards);
+    }
+
+    opsRefresh.addEventListener('click', async () => {
+      opsError.textContent = '';
+      opsRefresh.disabled = true;
+      try {
+        renderOps(await api('/api/ops/summary'));
+      } catch (error) {
+        resetOps();
+        opsError.textContent = `${error.message} (요약을 받지 못해 모든 항목을 미실행으로 둡니다.)`;
+      } finally {
+        opsRefresh.disabled = false;
+      }
+    });
+
+    // ---- 12단계 만들기 2: 1~11단계 정상·금지 요청 실측 표 ----
+    // 각 줄은 이 브라우저가 실제로 보낸 요청의 상태 코드·오류 코드·요청 ID(X-Request-Id, 없으면 Vercel 요청 ID)·시각입니다.
+    // 보내지 않은 시험은 미실행으로 남기고, 응답이 기대와 다르면 불일치로 적습니다. 메모 본문은 표에 넣지 않습니다.
+    const B_NOTE = 'b0000000-0000-4000-8000-000000000001';
+    const NOTICE = 'c0000000-0000-4000-8000-000000000001';
+    const OTHER_OWNER = '00000000-0000-4000-8000-000000000000';
+    let trialRows = [];
+
+    function resetTrials() {
+      trialRows = [];
+      trialsTable.hidden = true;
+      trialsTable.tBodies[0].replaceChildren();
+      trialsDownload.disabled = true;
+      trialsMeta.textContent = '미실행: 아직 요청을 보내지 않았습니다.';
+    }
+
+    async function probe(path, { method = 'GET', body, auth = 'session', credentials = 'same-origin' } = {}) {
+      if (auth === 'session' && session?.expiresAt && session.expiresAt - 30 < Date.now() / 1000) await refreshSession();
+      const headers = {};
+      if (auth === 'session' && session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
+      if (auth === 'forged') headers.Authorization = 'Bearer x.y.z'; // 서명 없는 가짜 값(실제 토큰 아님)
+      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      const response = await fetch(path, {
+        method, headers, credentials, cache: 'no-store', body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      let data = null;
+      if (response.status !== 204) data = await response.json().catch(() => null);
+      return {
+        status: response.status, data,
+        requestId: response.headers.get('x-request-id') ?? (response.headers.get('x-vercel-id') ? `vercel:${response.headers.get('x-vercel-id')}` : '없음'),
+        at: new Date().toISOString(),
+      };
+    }
+
+    function trialCases() {
+      let tempId = null;
+      const errorOf = result => (typeof result.data?.error === 'string' ? ` ${result.data.error}` : '');
+      const expectStatus = (status, error) => result => result.status === status && (!error || result.data?.error === error);
+      return [
+        { step: '2', kind: '금지', label: 'GET /data.json (비로그인 공개 파일)', expected: '200 · 메모 0건',
+          run: () => probe('/data.json', { auth: 'none' }),
+          describe: r => `HTTP ${r.status} · 메모 ${Array.isArray(r.data?.notes) ? r.data.notes.length : '항목 없음'}건`,
+          ok: r => r.status === 200 && (!Array.isArray(r.data?.notes) || r.data.notes.length === 0) },
+        { step: '3', kind: '금지', label: 'GET /api/notes (토큰 없음)', expected: '401', run: () => probe('/api/notes', { auth: 'none' }), ok: expectStatus(401) },
+        { step: '3', kind: '금지', label: 'GET /api/notes (위조 토큰)', expected: '401', run: () => probe('/api/notes', { auth: 'forged' }), ok: expectStatus(401) },
+        { step: '3', kind: '정상', label: 'GET /api/notes (내 메모 목록)', expected: '200',
+          run: () => probe('/api/notes'), describe: r => `HTTP ${r.status}${errorOf(r)}${Array.isArray(r.data) ? ` · ${r.data.length}건(본문 표시 안 함)` : ''}`, ok: expectStatus(200) },
+        { step: '3', kind: '정상', label: 'POST /api/notes (점검용 임시 메모 추가)', expected: '201',
+          run: async () => { const r = await probe('/api/notes', { method: 'POST', body: { title: '작전실 점검용 임시 메모', body: '점검 뒤 바로 지웁니다.' } }); tempId = r.data?.id ?? null; return r; },
+          ok: expectStatus(201) },
+        { step: '3', kind: '정상', label: 'PUT /api/notes/:id (임시 메모 수정)', expected: '200',
+          run: () => (tempId ? probe(`/api/notes/${tempId}`, { method: 'PUT', body: { title: '작전실 점검용 임시 메모', body: '수정 확인' } }) : null), ok: expectStatus(200) },
+        { step: '4', kind: '금지', label: 'GET /api/notes/:id (B 계정 메모)', expected: '404', run: () => probe(`/api/notes/${B_NOTE}`), ok: expectStatus(404) },
+        { step: '4', kind: '금지', label: 'POST /api/notes (owner_id를 남으로)', expected: '403 OWNER_MISMATCH',
+          run: () => probe('/api/notes', { method: 'POST', body: { title: '소유자 위조 시도', body: '거부되어야 함', owner_id: OTHER_OWNER } }), ok: expectStatus(403, 'OWNER_MISMATCH') },
+        { step: '4', kind: '금지', label: 'PUT /api/notes/:id (소유자 바꾸기)', expected: '403 OWNER_CHANGE_FORBIDDEN',
+          run: () => (tempId ? probe(`/api/notes/${tempId}`, { method: 'PUT', body: { title: '소유자 변경 시도', body: '거부되어야 함', owner_id: OTHER_OWNER } }) : null), ok: expectStatus(403, 'OWNER_CHANGE_FORBIDDEN') },
+        { step: '5', kind: '금지', label: '원본 Data API 직접 호출', expected: '거부(401·403)', run: () => null,
+          skip: '미실행: 공개 키가 필요한 요청이라 화면에서 보내지 않음(npm run bundle에서 환경변수로만 점검)' },
+        { step: '6·7·9', kind: '금지', label: '미등록 기기·복합 이상 접속·다량 조회(판정기·탐지)', expected: 'deny·step_up·회수 제안', run: () => null,
+          skip: '미실행: 반 엔진이 보내는 요청이라 이 화면 API로는 보낼 수 없음(npm run decider:test·detect:test는 가상 연습)' },
+        { step: '8', kind: '금지', label: 'GET /api/notes?owner_id=… (쿼리로 소유자 고르기)', expected: '400 QUERY_NOT_ALLOWED',
+          run: () => probe(`/api/notes?owner_id=${OTHER_OWNER}`), ok: expectStatus(400, 'QUERY_NOT_ALLOWED') },
+        { step: '8', kind: '금지', label: 'GET /api/notes/export (기능 이름 경로)', expected: '404', run: () => probe('/api/notes/export'), ok: expectStatus(404) },
+        { step: '8', kind: '금지', label: 'GET /api/notices (학생이 공지 목록)', expected: '403 INSTRUCTOR_REQUIRED', run: () => probe('/api/notices'), ok: expectStatus(403, 'INSTRUCTOR_REQUIRED') },
+        { step: '8', kind: '금지', label: 'PUT /api/notices/:id (학생이 공지 수정)', expected: '403 INSTRUCTOR_REQUIRED',
+          run: () => probe(`/api/notices/${NOTICE}`, { method: 'PUT', body: { title: '공지 수정 시도', body: '거부되어야 함', role: 'instructor' } }), ok: expectStatus(403, 'INSTRUCTOR_REQUIRED') },
+        { step: '10', kind: '금지', label: 'POST /api/restore/:id (B 계정 메모 복원)', expected: '404', run: () => probe(`/api/restore/${B_NOTE}`, { method: 'POST', body: {} }), ok: expectStatus(404) },
+        { step: '10', kind: '정상', label: 'POST /api/restore/:id (내 메모 한 건 복원)', expected: '200 · 해시 일치', run: () => null,
+          skip: '미실행: 자료를 사본으로 되돌리는 요청이라 자동으로 보내지 않음(B 계정으로 직접 확인)' },
+        { step: '11', kind: '금지', label: 'GET /api/notes (기기 쿠키 없이)', expected: '403 DEVICE_NOT_APPROVED',
+          run: () => probe('/api/notes', { credentials: 'omit' }), ok: expectStatus(403, 'DEVICE_NOT_APPROVED') },
+        { step: '11', kind: '정상', label: 'GET /api/device/status (승인된 기기)', expected: '200 approved',
+          run: () => probe('/api/device/status'), describe: r => `HTTP ${r.status}${errorOf(r)}${r.data?.deviceStatus ? ` ${r.data.deviceStatus}` : ''}`,
+          ok: r => r.status === 200 && r.data?.deviceStatus === 'approved' },
+        { step: '3', kind: '정상', label: 'DELETE /api/notes/:id (임시 메모 지우기)', expected: '204',
+          run: () => (tempId ? probe(`/api/notes/${tempId}`, { method: 'DELETE' }) : null), ok: expectStatus(204) },
+      ];
+    }
+
+    function addTrialRow(row) {
+      trialRows.push(row);
+      const tr = el('tr');
+      const id = el('td'); id.append(el('code', row.requestId));
+      const verdict = el('td'); verdict.append(badge(row.verdict));
+      tr.append(el('td', row.step), el('td', row.kind), el('td', row.label), el('td', row.expected), el('td', row.actual), verdict, id, el('td', row.at ? localTime(row.at) : '-'));
+      trialsTable.tBodies[0].append(tr);
+    }
+
+    trialsRun.addEventListener('click', async () => {
+      resetTrials();
+      trialsRun.disabled = true;
+      trialsTable.hidden = false;
+      trialsMeta.textContent = '요청을 보내는 중입니다.';
+      for (const item of trialCases()) {
+        const base = { step: item.step, kind: item.kind, label: item.label, expected: item.expected };
+        if (item.skip) { addTrialRow({ ...base, actual: item.skip, verdict: 'not_run', requestId: '-', at: null }); continue; }
+        try {
+          const result = await item.run();
+          if (!result) { addTrialRow({ ...base, actual: '미실행: 앞 요청(임시 메모 추가)이 실패해 보내지 않음', verdict: 'not_run', requestId: '-', at: null }); continue; }
+          const actual = item.describe ? item.describe(result) : `HTTP ${result.status}${typeof result.data?.error === 'string' ? ` ${result.data.error}` : ''}`;
+          addTrialRow({ ...base, actual, verdict: item.ok(result) ? 'match' : 'mismatch', requestId: result.requestId, at: result.at });
+        } catch {
+          addTrialRow({ ...base, actual: '미실행: 네트워크 오류로 응답을 받지 못함', verdict: 'not_run', requestId: '-', at: null });
+        }
+      }
+      const count = kind => trialRows.filter(row => row.verdict === kind).length;
+      trialsMeta.textContent = `실측 ${count('match') + count('mismatch')}건(일치 ${count('match')} · 불일치 ${count('mismatch')}) · 미실행 ${count('not_run')}건 · 심판 41종 시험은 미실행`;
+      trialsDownload.disabled = false;
+      trialsRun.disabled = false;
+      loadNotes();
+    });
+
+    trialsDownload.addEventListener('click', () => {
+      const cell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+      const header = ['단계', '구분', '요청', '기대 결과', '실제 API 결과', '판정', '요청 ID', '확인 시각(UTC)'];
+      const verdictText = { match: '일치', mismatch: '불일치', not_run: '미실행' };
+      const lines = [header, ...trialRows.map(row => [row.step, row.kind, row.label, row.expected, row.actual, verdictText[row.verdict], row.requestId, row.at ?? ''])];
+      const blob = new Blob([`\ufeff${lines.map(line => line.map(cell).join(',')).join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });
+      const link = el('a', undefined, { href: URL.createObjectURL(blob), download: 'byteback-step1-11-trials.csv' });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
+
+    resetOps();
     session = null;
     render();
     refreshDeviceAndNotes();

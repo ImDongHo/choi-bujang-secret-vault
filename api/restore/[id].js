@@ -5,6 +5,7 @@
 // - 메모 내용은 응답·로그에 넣지 않습니다. 응답은 {id, action, contentSha256}입니다.
 // - 8단계 규칙에 맞춰 /api/notes/:id와 같은 깊이에 기능 경로를 두지 않고 별도 경로를 씁니다.
 import { contentHash, isUuid, logDenied, notesTable, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, restTable, unavailable } from '../../src/notes-api.mjs';
+import { withOpsEvents } from '../../src/ops-events.mjs';
 
 const notFound = response => response.status(404).json({ error: 'BACKUP_NOT_FOUND' });
 
@@ -16,7 +17,7 @@ function readBody(request) {
   return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
 }
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['POST']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
@@ -87,3 +88,6 @@ export default async function handler(request, response) {
     return unavailable(response);
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다.
+export default withOpsEvents('restore', request => `${request.method} /api/restore/:id`, handler);

@@ -3,6 +3,8 @@
 // SUPABASE_URL, SUPABASE_SECRET_KEY는 Vercel 환경변수에서만 읽고 응답·로그에 넣지 않습니다.
 // 비밀번호와 토큰은 로그에 남기지 않습니다. 비밀번호나 JWT를 직접 만들지 않고 Supabase Auth가 발급한 세션만 전달합니다.
 
+import { withOpsEvents } from '../../src/ops-events.mjs';
+
 const ACTIONS = new Set(['login', 'refresh', 'logout']);
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u;
 
@@ -45,7 +47,7 @@ async function authRequest(path, { url, key }, { body, token } = {}) {
   return { status: upstream.status, ok: upstream.ok, data };
 }
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
   const action = Array.isArray(request.query?.action) ? request.query.action[0] : request.query?.action;
   if (!ACTIONS.has(action)) return response.status(404).json({ error: 'NOT_FOUND' });
@@ -95,3 +97,6 @@ export default async function handler(request, response) {
     return response.status(502).json({ error: 'AUTH_UNAVAILABLE' });
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다. 이메일·비밀번호·토큰은 기록하지 않습니다.
+export default withOpsEvents('auth', request => `${request.method} /api/auth/${ACTIONS.has(request.query?.action) ? request.query.action : ':action'}`, handler);

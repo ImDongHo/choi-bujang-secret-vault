@@ -4,6 +4,7 @@
 //   버튼을 눌러도 권한은 생기지 않습니다. 승인(approved)은 학생이 Supabase에서 직접 바꿉니다(supabase/step11-device-registrations.sql).
 // - 기기 번호 원문은 응답 본문·로그·DB에 넣지 않고, DB에는 해시만 저장합니다.
 import { deviceCookieHeader, deviceHash, deviceStatus, newDeviceId, rejectUnexpectedQuery, requireLogin, restTable, unavailable } from '../../src/notes-api.mjs';
+import { withOpsEvents } from '../../src/ops-events.mjs';
 
 const ACTIONS = { status: 'GET', request: 'POST' };
 
@@ -14,7 +15,7 @@ function labelOf(request) {
   return label.replace(/[^\p{L}\p{N} ._-]/gu, '') || '이 브라우저';
 }
 
-export default async function handler(request, response) {
+async function handler(request, response) {
   const action = Array.isArray(request.query?.action) ? null : request.query?.action;
   const method = ACTIONS[action];
   if (!method) return response.status(404).json({ error: 'NOT_FOUND' });
@@ -44,3 +45,6 @@ export default async function handler(request, response) {
     return unavailable(response);
   }
 }
+
+// 12단계: 응답마다 요청 ID를 붙이고 작전실 서버 기록(public.ops_events)에 한 줄 남깁니다.
+export default withOpsEvents('device', request => `${request.method} /api/device/${Object.hasOwn(ACTIONS, request.query?.action) ? request.query.action : ':action'}`, handler);

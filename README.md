@@ -18,7 +18,100 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 11단계 저장점
+## 현재 상태: 12단계 저장점
+
+- 12단계(탈환 작전실을 완성합니다). 따로 프로그램을 만들지 않고, 지금 배포 중인 자료실 화면에 「탈환 작전실」과 「1~11단계 정상·금지 요청 실측 표」를 붙였습니다. 두 칸 모두 로그인하고 서버가 승인된 기기로 확인한 뒤에만 보입니다.
+- 서버 기록(만들기 1의 근거): 자료·세션 API(`/api/notes`, `/api/notes/:id`, `/api/notices`, `/api/notices/:id`, `/api/restore/:id`, `/api/device/*`, `/api/auth/*`, `/api/ops/summary`)가 응답마다 요청 ID를 `X-Request-Id` 헤더로 붙이고, 응답을 보내기 전에 학습 DB `public.ops_events`에 한 줄을 추가합니다(`src/ops-events.mjs`, `supabase/step12-ops-events.sql`, 적용함).
+  - 기록 항목: 요청 ID·시각·검증된 사용자 ID(로그인 검사를 통과했을 때만)·서비스·경로 모양·상태 코드·결과(allowed·denied·error)·오류 코드. 메모 제목·본문·토큰·비밀번호·이메일·기기 번호·쿼리 원문은 기록하지 않습니다.
+  - 추가 전용: `anon`·`authenticated` 권한 없음, 서버(service_role)는 SELECT·INSERT만(UPDATE·DELETE·TRUNCATE 없음).
+  - Vercel Logs에는 같은 내용을 사용자 ID 대신 SHA-256 앞 8자리로 가린 한 줄(`ops event req=… sub=…`)로 남깁니다. 기록이 실패해도 원래 응답은 바뀌지 않고 로그 끝에 `record=failed`가 붙습니다.
+- 탈환 작전실(만들기 1): `GET /api/ops/summary`(`api/ops/summary.js`, `allowedRoutes`·판정기 구역 `GET /ops/summary`에 추가). 로그인한 **본인 기록만** 요약하고, 학생 토큰은 승인된 기기에서만 엽니다.
+  - 판정기·탐지 규칙: `src/decider.mjs`의 `RULE_IDS`와 `src/detect.mjs`의 `burst_read`.
+  - 탐지 사건: 최근 24시간 `ops_events` 건수, 허용·거부·오류 수, 거부 사유별 수, 최근 거부 10건(시각·경로·상태·사유·요청 ID). 같은 기록에 `detect()`를 돌린 결과(관찰·회수 제안)도 보여 줍니다.
+  - 회수 상태: 이 기기 상태와 내 기기의 승인·대기·회수됨 수.
+  - 복구 버전: 해시를 검증한 안전 정책 사본 버전, 내 메모 사본 수, 내 복원 기록 수.
+  - 각 항목은 서버가 실제로 읽은 값이면 「확인됨」, 읽지 못했거나 아직 요청하지 않았으면 「미실행」(이유 코드)으로 표시합니다. 메모 제목·본문은 응답에도 화면에도 넣지 않습니다.
+  - 대조 방법: 화면 위쪽의 요청 ID로 Vercel Logs에서 `ops summary req=<그 ID>` 한 줄을 찾으면 같은 수치(`events=… detect=… devices=… backups=… restores=… policy=…`)가 사용자 ID를 가린 채 적혀 있습니다. 학습 DB에서는 `supabase/step12-ops-events.sql`의 [2] 조회로 같은 요청 ID 한 줄을 찾습니다.
+- 실측 표(만들기 2): 작전실 아래 「실측 표 만들기」 버튼. 이 브라우저가 배포된 API에 실제로 요청을 보내고 단계·구분(정상·금지)·요청·기대 결과·실제 API 결과·판정(일치·불일치·미실행)·요청 ID·확인 시각을 한 표로 적습니다. 「표 내려받기(CSV)」로 저장할 수 있습니다.
+  - 실측하는 요청 17건:
+    - 2단계 `/data.json` 메모 0건.
+    - 3단계 토큰 없음·위조 토큰 401, 목록 200, 임시 메모 추가 201·수정 200·삭제 204.
+    - 4단계 B 메모 404, 남을 소유자로 추가 403, 소유자 바꾸기 403.
+    - 8단계 쿼리로 소유자 고르기 400, 기능 이름 경로 404, 공지 목록·수정 403.
+    - 10단계 B 메모 복원 404.
+    - 11단계 기기 쿠키 없이 403, 승인 기기 상태 200.
+  - 미실행으로 남기는 3건: 5단계 원본 Data API(공개 키가 필요해 화면에서 보내지 않음), 6·7·9단계 판정기·탐지(반 엔진 경로), 10단계 자기 메모 복원(자료를 바꾸므로 자동으로 보내지 않음).
+  - 심판의 41종 시험은 이 표가 실행하지 않으므로 통과로 적지 않습니다.
+  - 각 요청은 위 서버 기록에도 같은 요청 ID로 남아, 금지 요청 거부와 정상 요청 허용이 서버 쪽 실측 기록으로도 남습니다.
+- 확인(로컬, 가짜 DB·가짜 토큰·Playwright, 2026-10-13):
+  - 승인 전에는 작전실·표가 숨겨집니다. 불러오기 전에는 네 항목 모두 미실행입니다.
+  - 실측 17건이 모두 기대와 일치했고 미실행은 3건입니다. 표의 요청 ID 16개가 모두 서버 기록에 있습니다.
+  - 작전실 수치와 가린 서버 로그 한 줄이 같았고, 로그에 사용자 ID 원문이 없습니다. 화면에 메모 본문이 없고, 임시 메모는 지워졌으며 B 메모는 그대로입니다.
+  - 브라우저 저장소는 비어 있습니다. 11단계 화면 시험과 기기 시험의 결과도 이전과 같습니다.
+  - `decider:test`·`fixture:7`·`test:r5`·`test:package` 통과. 이 확인은 배포 환경 실측이 아닙니다.
+
+## 운영 안내: 설치·실행·중지·복구 (12단계 만들기 3)
+
+검사 기준 커밋은 이 README가 들어간 「12단계 저장점」 커밋입니다. `git log -1`로 확인한 값이 배포 주소 `/aleph.json`의 `commit`과 같아야 이 안내가 그 배포에 맞습니다. 단계별 통과 커밋은 다음과 같습니다(심판 판정은 학생이 받은 결과).
+
+- 8단계 `b9d601a` · 9단계 `be4acff` · 10단계 `638ab53` · 11단계 `55910aa`
+
+### 출처: 학생 몫과 제공 부분
+
+| 구분 | 무엇 | 위치 |
+|---|---|---|
+| 제공(운영 측) | **ALEPH SDP 엔진 사용**. 반 엔진이 신원·기기·경로를 확인한 뒤 학생 판정기 `decide(request)`를 부르고, 탐지 사건 전달과 접속 회수를 집행합니다. 엔진 코드와 설정은 이 저장소에 없습니다. | 운영 측 엔진(`docs/DECIDER_REQUEST.md`·`docs/DETECT_EVENTS.md`는 그 계약 설명) |
+| 제공(시작 틀) | 로그인 검사기, 배포 식별·빌드, 제출 묶음 도구, 시작 틀 시험·문서, 미구현 뼈대 `api/ai.js`·`api/threat-intel.js` | `src/verify-login.mjs`, `scripts/deployment-identity.mjs`, `scripts/build-public.mjs`, `scripts/bundle.mjs`, `test/`, `package/` |
+| 외부 서비스 | 학습 DB·로그인(Supabase), 배포(Vercel). 학생 계정에서 만든 프로젝트입니다. | Supabase 프로젝트, Vercel 프로젝트 |
+| 학생 몫 | 판정기 규칙 `device_registered`·`step_up_required`·`resource_zone` | `src/decider.mjs` |
+| 학생 몫 | 탐지 규칙 `burst_read` | `src/detect.mjs` |
+| 학생 몫 | 자료 API·세션 중계·기기 승인·복원·작전실 요약·서버 기록 | `api/notes`, `api/notices`, `api/auth`, `api/device`, `api/restore`, `api/ops`, `src/notes-api.mjs`, `src/ops-events.mjs` |
+| 학생 몫 | 접속 앱 화면(설치형 웹앱·기기 승인·작전실·실측 표) | `public/` |
+| 학생 몫 | 학습 DB 구성 SQL, 정책 비교·복원 도구, 자기 점검 | `supabase/`, `policy/`, `scripts/policy-*.mjs`, `src/attack-check.mjs` |
+
+비밀값은 포장하지 않습니다. Supabase 서버 전용 키·비밀번호·토큰·기기 번호는 저장소·제출 묶음(`artifacts/submission.json`, Git에 올리지 않음)·화면·로그에 없습니다. 값은 Vercel·Supabase의 공식 비밀 입력란에서만 넣습니다.
+
+### 설치 (새로 받는 사람 기준 재현 순서)
+
+1. 저장소를 받고 Node.js 22 이상에서 `npm ci`를 실행합니다.
+2. Supabase 프로젝트의 SQL Editor에서 아래 파일을 순서대로 실행합니다. 메모 문장과 실제 이메일은 파일에 없으니 가상 자료와 가상 계정(이메일 확인을 끈 시험 계정 A·B)은 직접 만듭니다.
+   - `supabase/step3-notes-crud.sql`
+   - `step4-owner-seed.sql`
+   - `step4-notes-rls.sql`
+   - `step5-revoke-direct.sql`
+   - `step8-notices.sql`
+   - `step10-notes-backup.sql`
+   - `step11-device-registrations.sql`
+   - `step12-ops-events.sql`
+3. Vercel에서 이 저장소로 프로젝트를 만들고 환경변수 **이름** `SUPABASE_URL`(프로젝트 주소)과 `SUPABASE_SECRET_KEY`(서버 전용 키)를 비밀 입력란에 넣은 뒤 배포합니다. 빌드는 Vercel이 주는 저장소·커밋·배포 주소가 있어야 통과합니다(로컬 화면만 볼 때는 `npm run build -- --local`).
+4. `aleph.config.json`의 `publicAppUrl`·`repoUrl`·`identityProvider`·`originalApiUrl`을 새 프로젝트에 맞춥니다. `judgeIssuer`는 운영 측 값이라 바꾸지 않습니다.
+
+### 실행
+
+- **자료실**: 배포 주소를 열고 로그인 → 「이 기기 승인 요청」 → Supabase SQL Editor에서 `step11-device-registrations.sql` [2]로 승인 → 「상태 다시 확인」. 그 뒤 자기 가상 메모만 보고 고칩니다.
+- **접속 앱**: 같은 주소에서 브라우저의 「앱 설치」를 누르면 설치형 웹앱으로 열립니다. 설치는 바로가기일 뿐 기기 확인이 아니며, 승인은 서버가 합니다. 네트워크가 끊기면 `offline.html` 안내만 보입니다.
+- **탈환 작전실**: 승인된 기기에서 「작전실 요약 불러오기」, 「실측 표 만들기」.
+- **학생 판정기**: 실제 판정은 ALEPH SDP 엔진이 `decide(request)`를 불러서 합니다. 로컬 `npm run decider:test`·`npm run fixture:7`은 가상 요청 연습입니다.
+- **탐지 규칙**: 실제 사건 전달은 엔진이 합니다. 로컬 `npm run detect:test`는 가상 사건 연습입니다. 작전실은 서버 기록에 같은 `detect()`를 돌린 결과를 보여 줄 뿐 회수를 집행하지 않습니다.
+- **자기 점검**: `npm run bundle`(커밋 뒤, 실제 배포에 비로그인 요청을 보냄). 원본 Data API 점검까지 하려면 실행할 때만 환경변수 `SUPABASE_PUBLISHABLE_KEY`를 직접 넣습니다.
+
+### 중지
+
+- **기기 하나**: Supabase SQL Editor에서 그 기기를 `revoked`로 바꿉니다(`step11-device-registrations.sql` 회수 줄). 바로 다음 요청부터 403 `DEVICE_NOT_APPROVED`입니다.
+- **계정 하나**: Supabase Authentication에서 그 시험 계정의 로그인을 막거나 지웁니다(가상 계정만).
+- **자료 API 전체**: Vercel 환경변수에서 `SUPABASE_SECRET_KEY`를 빼고 다시 배포하면 모든 자료 API가 500 `SERVER_NOT_CONFIGURED`로 닫힙니다. 자료는 지워지지 않고, 키를 다시 넣고 배포하면 돌아옵니다.
+- **학생 판정기·탐지**: 엔진 연결을 끊는 일은 운영 측 몫입니다. 판정기는 모르는 요청을 기본 거부(`starter.deny`)하고, 탐지는 회수 제안만 만들므로 학생이 따로 멈출 프로세스는 없습니다.
+- **접속 앱(브라우저)**: 로그아웃하면 페이지 메모리의 세션이 사라집니다. 서비스 워커는 브라우저의 사이트 데이터 삭제로 지웁니다.
+
+### 복구
+
+- **정책**: `npm run policy:diff`로 차이를 보고, `npm run policy:restore -- --yes`로 시험 정책만 안전 사본으로 되돌립니다(다른 서비스 보존, `policy/audit.log`에 덧붙임).
+- **메모 한 건**: 화면에서 로그인한 주인이 `POST /api/restore/:id`로 자기 메모 한 건을 사본에서 되살립니다(ID·소유자·내용 해시 대조, 감사 기록 추가).
+- **코드·배포**: Vercel Deployments에서 위 통과 커밋의 배포를 다시 운영 배포로 올리거나, `git revert`로 문제 커밋만 되돌린 뒤 푸시합니다. `git reset --hard`나 학습 DB 자료를 지우는 명령은 쓰지 않습니다.
+- **기기**: 회수된 기기는 「이 기기 승인 요청」을 다시 누르고 Supabase에서 다시 승인합니다.
+- **확인**: 복구 뒤 작전실 「실측 표 만들기」를 다시 실행해 금지 요청이 거부되고 정상 요청이 허용되는지 요청 ID와 함께 확인합니다.
+
+### 11단계 기능 (유지)
 
 - 11단계(나만의 접속 앱을 완성합니다). 따로 접속 프로그램을 만들거나 설치하지 않았고, 지금 배포 중인 자료실에 설치형 웹앱 설정과 기기 승인을 붙였습니다.
 - 설치형 웹앱(만들기 1): `public/manifest.webmanifest`(앱 이름 「최부장의 비밀창고」, 짧은 이름 「비밀창고」), `public/icon.svg`, 오프라인 안내 `public/offline.html`, 서비스 워커 `public/sw.js`(안내 페이지·아이콘만 저장, 메모·공지와 `/api` 응답은 저장하지 않음). 화면에 "설치나 승인 요청 버튼만으로는 기기 확인이 끝나지 않는다"고 적었습니다.

@@ -63,7 +63,10 @@ async function sendRequest(url, { method = 'GET', authorization, body } = {}) {
       // JSON이 아니면 메모 개수를 셀 수 없습니다.
     }
   }
-  return `HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}`;
+  // 12단계: 서버가 붙인 요청 ID(X-Request-Id)와 확인 시각을 함께 적어 작전실 서버 기록과 대조할 수 있게 합니다.
+  const requestId = response.headers?.get?.('x-request-id');
+  const trace = requestId ? `, 요청 ID ${requestId}, ${new Date().toISOString()}` : '';
+  return `HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`;
 }
 
 function unsignedToken(config) {
@@ -234,11 +237,49 @@ async function stepElevenChecks(app, config) {
   ]);
 }
 
+// 12단계: 제출 묶음은 점검 20개까지만 받으므로 1~11단계의 비로그인 거부 요청을 다시 보내고(실측),
+// 로그인·승인 기기가 필요한 정상·금지 요청은 화면 '실측 표 만들기'의 결과로 남기며 여기서는 미실행으로 적습니다.
+// 심판의 41종 시험은 이 점검이 실행하지 않으므로 통과로 적지 않습니다.
+async function stepTwelveChecks(app, config) {
+  const notes = new URL('/api/notes', app);
+  const item = new URL('/api/notes/00000000-0000-4000-8000-000000000000', app);
+  const notice = new URL('/api/notices/c0000000-0000-4000-8000-000000000001', app);
+  const probe = { title: '자기 점검', body: '비로그인 요청 시도' };
+  const staticFile = await countNotes(new URL('/data.json', app));
+  return [
+    { attackId: 'anonymous_static_note_read', expected: '2단계: 공개 /data.json에서 메모 0건 또는 404',
+      observed: staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건` },
+    { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: await sendRequest(notes) },
+    { attackId: 'forged_token_list_read', expected: '3단계: 서명 없는 가짜 토큰의 GET /api/notes는 401',
+      observed: await sendRequest(notes, { authorization: `Bearer ${unsignedToken(config)}` }) },
+    { attackId: 'anonymous_api_note_create', expected: '3단계: 토큰 없는 POST /api/notes는 401', observed: await sendRequest(notes, { method: 'POST', body: probe }) },
+    { attackId: 'anonymous_api_note_update', expected: '3단계: 토큰 없는 PUT /api/notes/:id는 401', observed: await sendRequest(item, { method: 'PUT', body: probe }) },
+    { attackId: 'anonymous_api_note_delete', expected: '3단계: 토큰 없는 DELETE /api/notes/:id는 401', observed: await sendRequest(item, { method: 'DELETE' }) },
+    { attackId: 'anon_data_api_note_read', expected: '5단계: 공개 키로 원본 Data API 메모 직접 조회는 거부', observed: await sendDataApi(config) },
+    { attackId: 'anonymous_notice_update', expected: '8단계: 토큰 없는 PUT /api/notices/:id는 401',
+      observed: await sendRequest(notice, { method: 'PUT', body: { title: '자기 점검', body: '비로그인 공지 수정 시도', role: 'instructor' } }) },
+    { attackId: 'anonymous_note_restore', expected: '10단계: 토큰 없는 POST /api/restore/:id는 401',
+      observed: await sendRequest(new URL('/api/restore/b0000000-0000-4000-8000-000000000001', app), { method: 'POST', body: {} }) },
+    { attackId: 'anonymous_device_request', expected: '11단계: 토큰 없는 POST /api/device/request는 401',
+      observed: await sendRequest(new URL('/api/device/request', app), { method: 'POST', body: {} }) },
+    { attackId: 'anonymous_ops_summary', expected: '12단계: 토큰 없는 GET /api/ops/summary는 401', observed: await sendRequest(new URL('/api/ops/summary', app)) },
+    { attackId: 'login_trials_table', expected: '1~11단계 로그인 정상 요청 허용·금지 요청 거부를 요청 ID·시각과 함께 표로 남김',
+      observed: '미실행: A 로그인·승인 기기가 필요해 화면 탈환 작전실의 「실측 표 만들기」로 학생이 직접 실행' },
+    { attackId: 'ops_summary_matches_log', expected: '작전실 요약 수치가 같은 요청 ID의 가린 서버 로그(ops summary) 줄과 같음',
+      observed: '미실행: 로그인 토큰이 필요해 화면과 Vercel Logs에서 학생이 직접 대조' },
+    { attackId: 'engine_path_decisions', expected: '6·7·9단계: 미등록 기기 deny, 복합 이상 step_up, 다량 조회 회수 제안',
+      observed: '미실행: 반 엔진이 보내는 요청(로컬 npm run decider:test·detect:test는 가상 연습)' },
+    { attackId: 'judge_trials_41', expected: '심판의 41종 시험',
+      observed: '미실행: 심판이 실행하며 이 점검은 결과를 받지 않음' },
+  ];
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 12) return stepTwelveChecks(app, config);
   if (config.step === 11) return stepElevenChecks(app, config);
   if (config.step === 10) return stepTenChecks(app, config);
   if (config.step === 9) return stepNineChecks(app, config);
