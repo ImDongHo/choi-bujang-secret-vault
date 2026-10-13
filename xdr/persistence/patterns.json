@@ -1,0 +1,30 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "persistence",
+  "source": "MITRE ATT&CK T1543 Create or Modify System Process (https://attack.mitre.org/techniques/T1543/) · T1053 Scheduled Task/Job (https://attack.mitre.org/techniques/T1053/) · T1547.001 Registry Run Keys / Startup Folder (https://attack.mitre.org/techniques/T1547/001/)",
+  "common": {
+    "corroboration": "핵심 표기(서비스·예약 작업·시작 폴더)와 함께 서명 없음·평소 목록에 없음·처음 보는/임의 이름·임시 폴더 실행 파일 같은 뒷받침 신호가 있을 때만 패턴으로 봅니다.",
+    "normalMarkers": ["평소 시각에 그대로", "서명된 채로", "기존 예약 작업이", "읽기만"],
+    "note": "MITRE 태그나 서비스·예약 작업이라는 낱말만으로는 운영체제 업데이트·기존 수업 도구와 구별되지 않으므로 막지 않습니다."
+  },
+  "patterns": [
+    {
+      "name": "unsigned-new-service",
+      "technique": "T1543",
+      "match": { "markers": ["서비스"], "anyOf": ["서명 없는", "서명이 없", "평소 목록에 없는"] },
+      "evidence": "MITRE ATT&CK T1543(.003 Windows Service): 공격자는 서명 없는 실행 파일을 가리키는 새 서비스를 만들거나 기존 서비스 실행 파일을 바꿔 다시 켜도 프로그램이 실행되게 합니다."
+    },
+    {
+      "name": "unfamiliar-scheduled-task",
+      "technique": "T1053",
+      "match": { "markers": ["예약 작업"], "anyOf": ["처음 보는", "임의 문자열", "수업 시간 밖"], "path": "임시 폴더 실행 파일" },
+      "evidence": "MITRE ATT&CK T1053(.005 Scheduled Task): 공격자는 낯선 이름의 예약 작업이 임시 폴더 등의 프로그램을 정해진 시각에 실행하게 해 머무름을 유지합니다."
+    },
+    {
+      "name": "startup-folder-change",
+      "technique": "T1547.001",
+      "match": { "markers": ["시작 폴더", "시작 프로그램", "Startup 경로"], "anyOf": ["평소 목록에 없는", "임시 폴더 실행 파일"] },
+      "evidence": "MITRE ATT&CK T1547.001(Startup Folder): 사용자 시작 폴더에 평소 목록에 없는 프로그램을 넣으면 로그인할 때마다 그 프로그램이 실행됩니다."
+    }
+  ]
+}

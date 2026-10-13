@@ -285,6 +285,23 @@
 - 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
 - 수정(심판 `X01_CLEAR_NOT_BLOCKED`, 커밋 `c25583f`): 판정자처럼 실행기·경보·`decide.mjs`만 따로 두고 돌리면 `decide.mjs`가 `read-alerts.mjs`·`patterns.json`을 찾지 못해 실행이 멈췄습니다. `decide.mjs`가 다른 파일을 import하거나 읽지 않도록 패턴 값(`patterns.json`과 같은 값)과 항목 추출을 파일 안에 넣었습니다. 격리 실행 결과도 block 10 · alert 9 · record 9입니다.
 
+## 보너스 xdr-04: 몰래 심어진 프로그램을 찾아냅니다
+
+- 실행: `npm run xdr:run -- persistence` → `xdr/persistence/result.json`. 이어서 `node xdr/persistence/respond.mjs` → 거부 규칙 `xdr/persistence/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/persistence.json`은 고치지 않습니다.
+- `read-alerts.mjs`(확인용, decide.mjs가 불러오지 않음): 시각·출발 주소·계정·규칙 수준·설명만 뽑고 비밀값처럼 보이는 값은 가림. 실행 파일 경로는 출력하지 않습니다. `node xdr/persistence/read-alerts.mjs` → 경보 24건·뽑은 줄 24줄 일치.
+- `patterns.json`: 근거가 있는 패턴 셋만 둡니다. 패턴마다 근거를 한 줄씩 적었습니다.
+  - `unsigned-new-service`(T1543): 서명 없거나 평소 목록에 없는 서비스
+  - `unfamiliar-scheduled-task`(T1053): 처음 보는·임의 이름의 예약 작업이 임시 폴더 실행 파일을 실행
+  - `startup-folder-change`(T1547.001): 시작 폴더·시작 프로그램에 평소 목록에 없는 프로그램이나 임시 폴더 실행 파일. 시작 폴더는 MITRE에서 T1547.001이라 근거를 정확히 적었습니다.
+- `decide.mjs`: 같은 패턴을 파일 맨 위 상수로 두고, import·파일 읽기/쓰기·바깥 요청 없이 계산합니다.
+  - 핵심 표기와 뒷받침 신호가 함께 있으면 0.88부터 시작해 block(0.85 이상)입니다. 임시 폴더 실행 파일·여러 패턴·연속 등록·규칙 수준 12 이상이면 더합니다.
+  - 머무름 관련 표기만 있는 T1543·T1053 경보는 alert(0.6~0.65)입니다.
+  - 「평소 시각에 그대로」·「서명된 채로」·「기존 예약 작업이」·「읽기만」 같은 정상 동작이나 근거가 없으면 record입니다. MITRE 태그만으로는 막지 않습니다.
+- `respond.mjs`: block 결과만 출발 주소 단위 거부 규칙(만료 60분, 근거 경보 번호)으로 넣습니다. 계정으로는 막지 않으므로, 같은 계정이 정상 주소에서 쓰여도 막히지 않습니다. 판정기(`src/decider.mjs`)의 기존 규칙은 고치지 않았습니다.
+- 결과(로컬, 2026-10-13): block 8 · alert 8 · record 8, 정상 이벤트 block 0건, 거부 규칙 7개.
+  - 다시 흘리기에서 명확한 공격 8건만 막히고 정상 요청 8건은 모두 통과했습니다.
+  - 아무것도 없는 격리 환경에서 decide.mjs 한 파일만 불러와도 같은 건수입니다. 심판의 격리 실행 결과는 제출 뒤 확인합니다.
+
 ## 보너스 xdr-03: 알려진 취약점 악용을 잡아 냅니다
 
 - 실행: `npm run xdr:run -- known-cve` → `xdr/known-cve/result.json`. 이어서 `node xdr/known-cve/respond.mjs` → 거부 규칙 `xdr/known-cve/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/known-cve.json`은 고치지 않습니다.
