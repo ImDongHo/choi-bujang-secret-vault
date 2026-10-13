@@ -108,7 +108,8 @@ async function anonymousView(request, response) {
     response.setHeader('Allow', 'GET');
     return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
   }
-  if (rejectUnexpectedQuery(request, response, [])) return;
+  // 공개 보기는 점검 이름(attackId) 쿼리 하나만 받습니다(기록용, 결과를 바꾸지 않음).
+  if (rejectUnexpectedQuery(request, response, ['attackId'])) return;
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) return response.status(500).json({ error: 'SERVER_NOT_CONFIGURED' });

@@ -17,8 +17,17 @@ function appUrl(config) {
 // 12단계: 점검 요청마다 X-Aleph-Attack-Id 헤더에 점검 이름(attackId)을 실어, 서버 기록과 어느 점검의 요청인지 대조할 수 있게 합니다.
 // 헤더 이름은 소문자로 씁니다(기록 쪽이 이름을 그대로 찾을 수 있게). 같은 값을 x-attack-id에도 싣습니다.
 const attackHeaders = attackId => (attackId ? { 'x-aleph-attack-id': attackId, 'x-attack-id': attackId } : {});
+// 실행 기록이 주소만 남겨도 어느 점검의 요청인지 알 수 있게 주소 끝에 ?attackId=<점검 이름>도 붙입니다.
+// 로그인 없는 요청은 서버가 로그인 검사를 쿼리 검사보다 먼저 하므로 결과(401)는 바뀌지 않습니다.
+function tagged(url, attackId) {
+  if (!attackId) return url;
+  const next = new URL(url.href);
+  next.searchParams.set('attackId', attackId);
+  return next;
+}
 
-async function countNotes(url, attackId) {
+async function countNotes(rawUrl, attackId) {
+  const url = tagged(rawUrl, attackId);
   const response = await fetch(url, { headers: attackHeaders(attackId), redirect: 'error', signal: AbortSignal.timeout(10000) });
   let count = null;
   if (response.ok) {
@@ -50,7 +59,8 @@ async function stepTwoChecks(app) {
 
 // 3단계: 토큰 없이, 또는 서명 없는 가짜 토큰으로 메모 API를 불러 거부되는지 봅니다.
 // 응답 본문과 메모 내용은 기록하지 않고 HTTP 상태와 메모 개수만 적습니다.
-async function sendRequest(url, { method = 'GET', authorization, body, attackId } = {}) {
+async function sendRequest(rawUrl, { method = 'GET', authorization, body, attackId } = {}) {
+  const url = tagged(rawUrl, attackId);
   const headers = attackHeaders(attackId);
   if (authorization) headers.Authorization = authorization;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -313,7 +323,8 @@ async function stepTwelveChecks(app, config) {
 }
 
 // 작전실 공개 보기 응답에서 상태 코드·범위·기록 줄 수와, 이번에 보낸 점검 이름이 붙은 줄 수만 꺼냅니다(계산해 채우지 않음).
-async function readOpsSummary(url, sentIds) {
+async function readOpsSummary(rawUrl, sentIds) {
+  const url = tagged(rawUrl, 'ops_summary_anonymous_records');
   const response = await fetch(url, { headers: attackHeaders('ops_summary_anonymous_records'), redirect: 'error', signal: AbortSignal.timeout(10000) });
   let data = null;
   try { data = await response.json(); } catch { /* JSON이 아니면 기록을 셀 수 없습니다. */ }
@@ -323,7 +334,8 @@ async function readOpsSummary(url, sentIds) {
   const sent = `GET ${url.href}`;
   if (!response.ok || !records) return `${sent} → HTTP ${response.status}${data?.scope ? `, scope ${data.scope}` : ''}, 가린 기록 없음${trace}`;
   const found = sentIds.filter(id => records.some(row => row.attackId === id));
-  return `${sent} → HTTP ${response.status}, scope ${data.scope}, 가린 기록 ${records.length}줄, 점검 이름 기록 ${found.length}/${sentIds.length}${trace}`;
+  // 전체 줄 수는 뒤따르는 요청마다 늘어나므로 적지 않고, 이번에 보낸 점검 이름이 붙은 줄만 적습니다.
+  return `${sent} → HTTP ${response.status}, scope ${data.scope}, 점검 이름이 붙은 가린 기록 ${found.length}/${sentIds.length}(${found.join(',') || '없음'})${trace}`;
 }
 
 export async function runAttackChecks(config) {

@@ -63,7 +63,8 @@ export function withOpsEvents(service, route, handler) {
     const shape = String(typeof route === 'function' ? route(request) : route).slice(0, 60);
     const method = typeof request.method === 'string' && /^[A-Z]{3,7}$/u.test(request.method) ? request.method : 'OTHER';
     const reason = REASON.test(body?.error ?? '') ? body.error : '';
-    const rawAttack = request.headers?.[ATTACK_HEADER] ?? request.headers?.['x-attack-id'];
+    const queryAttack = typeof request.query?.attackId === 'string' ? request.query.attackId : undefined;
+    const rawAttack = request.headers?.[ATTACK_HEADER] ?? request.headers?.['x-attack-id'] ?? queryAttack;
     // 진단용: Authorization 헤더가 있었는지만 남깁니다(값은 읽지도 남기지도 않음).
     const authPresent = typeof request.headers?.authorization === 'string' && request.headers.authorization.length > 0;
     const attackId = typeof rawAttack === 'string' && ATTACK_ID.test(rawAttack) ? rawAttack : null;
