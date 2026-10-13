@@ -166,11 +166,21 @@ async function stepFiveChecks(app, config) {
   ]);
 }
 
+// 6단계: 등록 기기만 들어오게 하는 판정 규칙(device_registered)은 src/decider.mjs에 있습니다.
+// 미등록 기기로 실제 자료실에 들어오는 공격은 심판이 맡으므로 여기서는 보내지 않고 미실행으로 남깁니다.
+async function stepSixChecks(app, config) {
+  return (await stepFiveChecks(app, config)).concat([
+    { attackId: 'unregistered_device_access', expected: '미등록 기기 요청은 판정기가 deny·device_not_registered로 거부',
+      observed: '미실행: 미등록 기기 공격은 심판이 보냄(로컬 npm run decider:test는 가상 요청 연습)' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 6) return stepSixChecks(app, config);
   if (config.step === 5) return stepFiveChecks(app, config);
   if (config.step === 4) return stepFourChecks(app, config);
   if (config.step === 3) return stepThreeChecks(app, config);

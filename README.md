@@ -18,7 +18,18 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 5단계 저장점
+## 현재 상태: 6단계 저장점
+
+- 6단계(등록한 기기만 자료실에 들어옵니다): `src/decider.mjs`에 규칙 `device_registered`를 넣었습니다. 판정 요청의 `request.deviceRegistered`가 `true`일 때만 `allow`(이유 `approved`), 미등록(`false`)이거나 값이 없으면 `deny`·`device_not_registered`입니다. `RULE_IDS` = `['starter.deny', 'device_registered']`(`starter.deny`는 계약 형식이 아닌 요청 거부에 그대로 사용). `decide(request)` 이름·인자와 응답 다섯 항목은 바꾸지 않았습니다.
+- 판정 요청에서 쓰는 값(`docs/DECIDER_REQUEST.md`): 사용자는 반 엔진이 만든 가명 `subjectId`, 기기는 확인된 16자리 `deviceId`와 등록 여부 `deviceRegistered`로 들어옵니다. 브라우저 값이나 계약 밖 `request.device`·`request.identity`는 쓰지 않습니다. 인증서·CA·서명 키는 만들지 않았고 Git에도 없습니다.
+- 확인 순서(로컬 가상 요청 연습, 심판 판정 아님):
+  1. 저장소 루트에서 `npm run decider:test`
+  2. 정상 결과: `통과 · 등록 기기의 정상 요청`(allow)과 `통과 · 미등록 기기의 가상 요청`(deny·device_not_registered) 두 줄이 모두 보여야 합니다. `확인 필요`가 한 줄이라도 있으면 실패입니다.
+  3. 실제 미등록 기기 공격은 심판이 보냅니다. 이번 과정에는 따로 설치할 접속 프로그램이 없습니다.
+- 실행 기록(2026-10-13): `npm run decider:test` → 두 줄 모두 통과. 값 없음·문자열 `"true"`·`null`·계약 밖 `request.device`만 있는 요청도 모두 `device_not_registered`로 거부됨을 따로 확인했습니다.
+- 5단계 배포 확인(학생, 2026-10-07): `/aleph.json`에 `step 5`, `allowedRoutes` 8개, `originalApiUrl` 확인. 서버 경유 로그인 정상, 5단계와 보너스 xdr-01·02 제출 통과.
+
+### 5단계 기능 (유지)
 
 - 5단계(자료 요청을 서버 한곳으로): 메모 자료는 앱 서버 함수 `/api/notes`, `/api/notes/:id`로만 읽고 고칩니다.
   - 브라우저 코드(`public/index.html`) 점검 결과 Supabase에 메모를 직접 읽거나 고치는 호출은 **없음**이었습니다(`fetch`는 `/api/notes`뿐, Supabase 호출은 로그인용 `auth.*`뿐).
