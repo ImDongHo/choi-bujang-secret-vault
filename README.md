@@ -29,6 +29,7 @@
 - 수정 2(같은 오류 재발, 커밋 `faccddd`): 판정기가 엔진이 확인한 `service`로도 구역을 나눕니다. 메모 구역은 `service: notes`만, 공지 구역은 `notes`·`notices`만 받고, 서비스와 경로가 다른 구역을 가리키거나 서비스가 없으면 `route_not_allowed`로 거부합니다. 한계: 판정 요청에 메모 주인 정보가 없어 요청 하나만으로 B의 A 메모를 구별하는 문제는 그대로입니다(강사·조교에게 심판 요청 모양 확인 필요).
 - 실제 배포 확인(학생, 2026-10-13, 커밋 `faccddd`): `/aleph.json` step 8·커밋 일치·`allowedRoutes` 11개. B 로그인으로 A 메모 `GET /api/notes/:id` → 404, B의 공지 `PUT /api/notices/:id`(본문 role=instructor 포함) → 403.
 - 수정 3(심판 공격 「다른 구역 메모를 API로 조회」만 통함, 커밋 `9418fe7`): 학생이 `GET /api/notices`·`GET /api/notices/:id`로 공지 구역을 읽을 수 있었습니다. 구역 규칙은 '자기 메모 읽기·수정'과 '강사 공지'뿐이므로 공지 구역은 읽기·수정 모두 저장된 강사만 허용하고 학생은 403 `INSTRUCTOR_REQUIRED`로 바꿨습니다. 판정기도 공지 경로를 모두 `instructor_required`로 거부합니다.
+- 수정 4(같은 오류, 커밋 `dc03664`): 자료 API가 주소에 붙은 쿼리(`?owner_id=`, `?id=`, `?zone=` 등)를 무시하고 200(자기 자료)을 돌려줬습니다. 메모·공지 API 4개가 예상하지 않은 쿼리를 400 `QUERY_NOT_ALLOWED`로 거부합니다(한 건 주소는 경로의 `:id` 하나만, 목록 주소는 쿼리 없이만). 판정기는 이미 `queryLength`가 0이 아니면 거부합니다.
 - 강사 지정(필요할 때 학생이 SQL Editor에서): `insert into public.instructors (user_id) select id from auth.users where email = '<강사 가상 이메일>' on conflict do nothing;`
 - 실행 기록(2026-10-13, 로컬 가짜 DB·가짜 토큰): `npm run decider:test` 4줄 통과, `npm run fixture:7` allow/step_up. 판정기 — A 자기 메모 GET·PUT allow, 학생 공지 수정 deny(instructor_required), 모르는 경로·`/notes/export`·쿼리 있음·접두어 섞임·깊이 다름 deny. 자료 API — B의 A 메모 GET·PUT(본문 role=instructor 포함) 404, 학생 공지 PUT(본문 role=instructor 포함) 403·원문 그대로, 강사 공지 PUT 200, 강사도 남의 메모 404, 무로그인 401. 학생 로컬 실행이며 심판 판정이 아닙니다.
 

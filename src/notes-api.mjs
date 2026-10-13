@@ -23,6 +23,17 @@ export function resourceId(kind, id) {
   return `${kind}:${id ?? '*'}`;
 }
 
+// 8단계: 쿼리로 기능·소유자·구역을 고르지 않습니다. 한 건 주소는 경로의 :id 하나만, 목록 주소는 쿼리 없이만 받습니다.
+// 예상하지 않은 쿼리(owner_id, zone, 중복 id 등)가 붙으면 무시하지 않고 400으로 거부합니다.
+export function rejectUnexpectedQuery(request, response, allowedKeys = []) {
+  const query = request.query ?? {};
+  const bad = Object.entries(query).some(([key, value]) => !allowedKeys.includes(key) || typeof value !== 'string');
+  if (!bad) return false;
+  logDenied('query', 'query_not_allowed');
+  response.status(400).json({ error: 'QUERY_NOT_ALLOWED' });
+  return true;
+}
+
 // 거부 사유를 짧게 남깁니다. 토큰·키·메모 내용·사용자 ID는 기록하지 않습니다.
 export function logDenied(resource, reason) {
   console.warn(`deny ${resource} reason=${reason}`);

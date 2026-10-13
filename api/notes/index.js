@@ -4,11 +4,12 @@
 // 4단계: 본문에 다른 사람을 소유자로 적은 추가 요청은 403으로 거부합니다.
 // 브라우저가 보낸 owner_id·userId·role은 소유자로 쓰지 않습니다.
 import { randomUUID } from 'node:crypto';
-import { claimsOtherOwner, isUuid, notesTable, readNoteInput, requireLogin, toNote, unavailable } from '../../src/notes-api.mjs';
+import { claimsOtherOwner, isUuid, notesTable, readNoteInput, rejectUnexpectedQuery, requireLogin, toNote, unavailable } from '../../src/notes-api.mjs';
 
 export default async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'POST']);
   if (!ctx) return;
+  if (rejectUnexpectedQuery(request, response, [])) return;
 
   try {
     if (request.method === 'GET') {
