@@ -37,3 +37,8 @@ commit;
 -- 최근 24시간 결과별 건수(사용자 ID는 화면·로그에 쓰지 않고 SQL Editor 안에서만 씁니다):
 -- select outcome, count(*) from public.ops_events
 --   where owner_id = (select id from auth.users where email = '<가상 이메일>') and at > now() - interval '24 hours' group by outcome;
+
+-- [3] 실행 기록(ops/execution-record.json의 bundleRun) 다시 뽑기: 점검 이름(attackId)이 붙은 로그인 없는 요청의 가린 기록.
+--     사용자 ID는 고르지 않습니다(로그인 없는 요청이라 처음부터 없음).
+-- select attack_id, route, status, reason, request_id, at from public.ops_events
+--   where attack_id is not null and owner_id is null order by at desc limit 20;

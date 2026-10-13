@@ -1,0 +1,305 @@
+{
+  "schema": "byteback.ops.execution-record.v1",
+  "note": "실제로 보낸 요청의 결과만 적은 가린 실행 기록입니다. 사용자 ID·토큰·이메일·메모 본문은 넣지 않았습니다. 심판의 판정이 아니며, 심판 41종 시험은 이 기록에 없고 미실행(not_run)입니다.",
+  "bundleRun": {
+    "source": "심판 격리 환경이 커밋 395cc5b로 실행한 npm run bundle의 요청을 학습 DB public.ops_events(가린 서버 기록)에서 attackId로 찾은 결과",
+    "deployment": "https://choi-bujang-secret-vault-eta-five.vercel.app",
+    "records": [
+      {
+        "attackId": "anonymous_static_note_read",
+        "sent": "GET /data.json?attackId=anonymous_static_note_read",
+        "expected": "404 또는 메모 0건",
+        "observed": "정적 파일이라 서버 함수 기록(ops_events)에는 남지 않음",
+        "requestId": null,
+        "at": null
+      },
+      {
+        "attackId": "anonymous_api_list_read",
+        "sent": "GET /api/notes?attackId=anonymous_api_list_read",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "requestId": "24a99309-a7f5-408c-b7fe-807d529ab75f",
+        "at": "2026-10-13T07:03:52.332Z"
+      },
+      {
+        "attackId": "anonymous_other_note_read",
+        "sent": "GET /api/notes/b0000000-0000-4000-8000-000000000001?attackId=anonymous_other_note_read",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "requestId": "08698f0e-f803-4074-a21d-0774b2130a57",
+        "at": "2026-10-13T07:03:53.477Z"
+      },
+      {
+        "attackId": "anonymous_notice_read",
+        "sent": "GET /api/notices/c0000000-0000-4000-8000-000000000001?attackId=anonymous_notice_read",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "requestId": "d05986d4-ad8b-4ee5-aff2-63ff439ae4de",
+        "at": "2026-10-13T07:03:54.536Z"
+      },
+      {
+        "attackId": "anonymous_device_status",
+        "sent": "GET /api/device/status?attackId=anonymous_device_status",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "requestId": "c3d4a93a-f64d-46f0-acec-3cd7619fbd16",
+        "at": "2026-10-13T07:03:55.618Z"
+      },
+      {
+        "attackId": "ops_summary_anonymous_records",
+        "sent": "GET /api/ops/summary?attackId=ops_summary_anonymous_records",
+        "expected": "200 scope anonymous",
+        "observed": "HTTP 200",
+        "requestId": "0eb90b8f-e49d-4bf1-af58-3e60f4dc48d0",
+        "at": "2026-10-13T07:03:57.614Z"
+      }
+    ],
+    "notRun": [
+      "forged_token_list_read",
+      "forged_token_other_note_read",
+      "anonymous_api_note_create",
+      "anonymous_api_note_update",
+      "anonymous_api_note_delete",
+      "anon_data_api_note_read",
+      "anonymous_notice_update",
+      "anonymous_note_restore",
+      "anonymous_device_request",
+      "login_trials_table",
+      "engine_path_decisions",
+      "judge_trials_41"
+    ]
+  },
+  "trials": {
+    "source": "배포 화면 탈환 작전실 「1~11단계 정상·금지 요청 실측 표」를 A 계정·승인 기기로 실행해 내려받은 결과(2026-10-13T05:45Z)",
+    "summary": {
+      "sent": 17,
+      "match": 16,
+      "mismatch": 1,
+      "notRun": 3,
+      "mismatchNote": "anonymous_static_note_read의 기대값 오류(위 note)이며, 고친 뒤 같은 표는 17건 모두 일치"
+    },
+    "records": [
+      {
+        "attackId": "anonymous_static_note_read",
+        "step": "2",
+        "kind": "forbidden",
+        "request": "GET /data.json (비로그인 공개 파일)",
+        "expected": "200 · 메모 0건",
+        "observed": "HTTP 404 · 메모 목록 없음",
+        "verdict": "mismatch",
+        "requestId": "vercel:icn1::b6j2x-1791870323687-6c53ccfe7ebe",
+        "checkedAt": "2026-10-13T05:45:27.386Z",
+        "note": "당시 표의 기대값이 「200 · 메모 0건」으로만 적혀 불일치였습니다. 2단계 기준은 「메모 0건 또는 404」이므로 기대값을 고쳤고, 실제 결과 404는 정상입니다."
+      },
+      {
+        "attackId": "anonymous_api_list_read",
+        "step": "3",
+        "kind": "forbidden",
+        "request": "GET /api/notes (토큰 없음)",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "verdict": "match",
+        "requestId": "e3b31bb0-38e4-425a-903c-9bbc3fd9202c",
+        "checkedAt": "2026-10-13T05:45:28.423Z"
+      },
+      {
+        "attackId": "forged_token_list_read",
+        "step": "3",
+        "kind": "forbidden",
+        "request": "GET /api/notes (위조 토큰)",
+        "expected": "401",
+        "observed": "HTTP 401 LOGIN_REQUIRED",
+        "verdict": "match",
+        "requestId": "321862c2-2830-4b7d-aacd-9d2374f3b1a7",
+        "checkedAt": "2026-10-13T05:45:29.289Z"
+      },
+      {
+        "attackId": "login_own_note_list",
+        "step": "3",
+        "kind": "normal",
+        "request": "GET /api/notes (내 메모 목록)",
+        "expected": "200",
+        "observed": "HTTP 200 · 4건(본문 표시 안 함)",
+        "verdict": "match",
+        "requestId": "a43640c8-0525-446f-abe8-f9f3fe976a08",
+        "checkedAt": "2026-10-13T05:45:30.684Z"
+      },
+      {
+        "attackId": "login_temp_note_create",
+        "step": "3",
+        "kind": "normal",
+        "request": "POST /api/notes (점검용 임시 메모 추가)",
+        "expected": "201",
+        "observed": "HTTP 201",
+        "verdict": "match",
+        "requestId": "d5c19a85-dd47-4599-a4de-7521a208d78e",
+        "checkedAt": "2026-10-13T05:45:32.562Z"
+      },
+      {
+        "attackId": "login_temp_note_update",
+        "step": "3",
+        "kind": "normal",
+        "request": "PUT /api/notes/:id (임시 메모 수정)",
+        "expected": "200",
+        "observed": "HTTP 200",
+        "verdict": "match",
+        "requestId": "e9b950d2-4af8-4dc2-bd39-97b85c742b13",
+        "checkedAt": "2026-10-13T05:45:35.109Z"
+      },
+      {
+        "attackId": "login_other_note_read",
+        "step": "4",
+        "kind": "forbidden",
+        "request": "GET /api/notes/:id (B 계정 메모)",
+        "expected": "404",
+        "observed": "HTTP 404 NOTE_NOT_FOUND",
+        "verdict": "match",
+        "requestId": "9c98798b-5659-4639-8911-fa5d4ab3bf07",
+        "checkedAt": "2026-10-13T05:45:36.568Z"
+      },
+      {
+        "attackId": "login_owner_claim_create",
+        "step": "4",
+        "kind": "forbidden",
+        "request": "POST /api/notes (owner_id를 남으로)",
+        "expected": "403 OWNER_MISMATCH",
+        "observed": "HTTP 403 OWNER_MISMATCH",
+        "verdict": "match",
+        "requestId": "f7032ad0-3a42-49f7-98a8-1e5226178a8d",
+        "checkedAt": "2026-10-13T05:45:37.770Z"
+      },
+      {
+        "attackId": "login_owner_change_update",
+        "step": "4",
+        "kind": "forbidden",
+        "request": "PUT /api/notes/:id (소유자 바꾸기)",
+        "expected": "403 OWNER_CHANGE_FORBIDDEN",
+        "observed": "HTTP 403 OWNER_CHANGE_FORBIDDEN",
+        "verdict": "match",
+        "requestId": "32bd1e79-038b-49db-b2b3-8a6cd7d4eb59",
+        "checkedAt": "2026-10-13T05:45:38.499Z"
+      },
+      {
+        "attackId": "anon_data_api_note_read",
+        "step": "5",
+        "kind": "forbidden",
+        "request": "원본 Data API 직접 호출",
+        "expected": "거부(401·403)",
+        "observed": "미실행: 공개 키가 필요한 요청이라 화면에서 보내지 않음(npm run bundle에서 환경변수로만 점검)",
+        "verdict": "not_run",
+        "requestId": null,
+        "checkedAt": null
+      },
+      {
+        "attackId": "engine_path_decisions",
+        "step": "6·7·9",
+        "kind": "forbidden",
+        "request": "미등록 기기·복합 이상 접속·다량 조회(판정기·탐지)",
+        "expected": "deny·step_up·회수 제안",
+        "observed": "미실행: 반 엔진이 보내는 요청이라 이 화면 API로는 보낼 수 없음(npm run decider:test·detect:test는 가상 연습)",
+        "verdict": "not_run",
+        "requestId": null,
+        "checkedAt": null
+      },
+      {
+        "attackId": "login_query_owner_select",
+        "step": "8",
+        "kind": "forbidden",
+        "request": "GET /api/notes?owner_id=… (쿼리로 소유자 고르기)",
+        "expected": "400 QUERY_NOT_ALLOWED",
+        "observed": "HTTP 400 QUERY_NOT_ALLOWED",
+        "verdict": "match",
+        "requestId": "f403ee2a-4c7d-4168-a5a5-2a74c7d77ad2",
+        "checkedAt": "2026-10-13T05:45:38.953Z"
+      },
+      {
+        "attackId": "login_reserved_path_read",
+        "step": "8",
+        "kind": "forbidden",
+        "request": "GET /api/notes/export (기능 이름 경로)",
+        "expected": "404",
+        "observed": "HTTP 404 NOTE_NOT_FOUND",
+        "verdict": "match",
+        "requestId": "6ea8c769-87ea-46f3-b791-b2a0cc6b3b72",
+        "checkedAt": "2026-10-13T05:45:39.657Z"
+      },
+      {
+        "attackId": "login_notice_list_read",
+        "step": "8",
+        "kind": "forbidden",
+        "request": "GET /api/notices (학생이 공지 목록)",
+        "expected": "403 INSTRUCTOR_REQUIRED",
+        "observed": "HTTP 403 INSTRUCTOR_REQUIRED",
+        "verdict": "match",
+        "requestId": "c3c207b7-e12f-4ef5-b898-19c37951be33",
+        "checkedAt": "2026-10-13T05:45:41.860Z"
+      },
+      {
+        "attackId": "login_notice_update",
+        "step": "8",
+        "kind": "forbidden",
+        "request": "PUT /api/notices/:id (학생이 공지 수정)",
+        "expected": "403 INSTRUCTOR_REQUIRED",
+        "observed": "HTTP 403 INSTRUCTOR_REQUIRED",
+        "verdict": "match",
+        "requestId": "888c7267-0586-49a2-a36d-b18d7c11b8a8",
+        "checkedAt": "2026-10-13T05:45:44.070Z"
+      },
+      {
+        "attackId": "login_other_note_restore",
+        "step": "10",
+        "kind": "forbidden",
+        "request": "POST /api/restore/:id (B 계정 메모 복원)",
+        "expected": "404",
+        "observed": "HTTP 404 BACKUP_NOT_FOUND",
+        "verdict": "match",
+        "requestId": "0aa489ea-e259-4748-b5d8-3c841f341e4e",
+        "checkedAt": "2026-10-13T05:45:45.920Z"
+      },
+      {
+        "attackId": "restore_one_note_hash_match",
+        "step": "10",
+        "kind": "normal",
+        "request": "POST /api/restore/:id (내 메모 한 건 복원)",
+        "expected": "200 · 해시 일치",
+        "observed": "미실행: 자료를 사본으로 되돌리는 요청이라 자동으로 보내지 않음(B 계정으로 직접 확인)",
+        "verdict": "not_run",
+        "requestId": null,
+        "checkedAt": null
+      },
+      {
+        "attackId": "cookieless_device_note_read",
+        "step": "11",
+        "kind": "forbidden",
+        "request": "GET /api/notes (기기 쿠키 없이)",
+        "expected": "403 DEVICE_NOT_APPROVED",
+        "observed": "HTTP 403 DEVICE_NOT_APPROVED",
+        "verdict": "match",
+        "requestId": "95705311-8dde-465b-9c55-e8feeb123e2f",
+        "checkedAt": "2026-10-13T05:45:46.871Z"
+      },
+      {
+        "attackId": "approved_device_status",
+        "step": "11",
+        "kind": "normal",
+        "request": "GET /api/device/status (승인된 기기)",
+        "expected": "200 approved",
+        "observed": "HTTP 200 approved",
+        "verdict": "match",
+        "requestId": "37f07218-cac2-4733-b8d5-314c636a18b8",
+        "checkedAt": "2026-10-13T05:45:48.428Z"
+      },
+      {
+        "attackId": "login_temp_note_delete",
+        "step": "3",
+        "kind": "normal",
+        "request": "DELETE /api/notes/:id (임시 메모 지우기)",
+        "expected": "204",
+        "observed": "HTTP 204",
+        "verdict": "match",
+        "requestId": "8289d11b-26f8-4fe6-8630-5cf92d2a7c75",
+        "checkedAt": "2026-10-13T05:45:50.349Z"
+      }
+    ]
+  }
+}
