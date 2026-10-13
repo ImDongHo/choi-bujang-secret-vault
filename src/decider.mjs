@@ -31,6 +31,21 @@ const RESERVED_SEGMENTS = new Set(['export', 'import', 'download', 'backup', 'du
   'admin', 'search', 'list', 'new', 'edit', 'update', 'delete', 'raw', 'share', 'restore']);
 const DEVICE_ID = /^[0-9a-f]{16}$/u;
 
+// 메모 자원(notes:<id>)을 처음 허용받은 사용자(subjectId)와 묶어 둡니다. 다른 사용자가 같은 메모를 요청하면 거부합니다.
+// 판정 요청에 소유자 정보가 없으므로, 엔진이 확인한 subjectId와 정확한 경로의 자료 ID만으로 구역을 나눕니다.
+const NOTE_OWNERS = new Map();
+const MAX_BINDINGS = 10000;
+function noteKeyOf(request, zone) {
+  if (zone.zone !== 'own_notes') return null;
+  const id = request.path.split('/').at(-1);
+  return zone.route.endsWith('/:id') ? `notes:${id}` : null;
+}
+function bindNoteOwner(key, subjectId) {
+  if (!key || NOTE_OWNERS.has(key)) return;
+  if (NOTE_OWNERS.size >= MAX_BINDINGS) NOTE_OWNERS.delete(NOTE_OWNERS.keys().next().value);
+  NOTE_OWNERS.set(key, subjectId);
+}
+
 export function matchZone(request) {
   const { method, path, route, queryLength } = request ?? {};
   if (typeof method !== 'string' || typeof path !== 'string' || typeof route !== 'string') return null;
@@ -145,6 +160,11 @@ export async function decide(request) {
   const zone = matchZone(request);
   if (!zone) return response(request, 'deny', 'route_not_allowed', 'resource_zone');
   if (zone.instructorOnly) return response(request, 'deny', 'instructor_required', 'resource_zone');
+  const noteKey = noteKeyOf(request, zone);
+  const owner = noteKey ? NOTE_OWNERS.get(noteKey) : undefined;
+  if (owner !== undefined && owner !== request.subjectId) {
+    return response(request, 'deny', 'resource_owner_mismatch', 'resource_zone');
+  }
   const signals = readSignals(request);
   const events = readRecentEvents(request);
   // 출처가 엔진 값(none·judge_fixture)이 아니거나 형식이 틀린 접속 정보는 믿지도, 정상으로 채우지도 않고 다시 확인합니다.
@@ -156,5 +176,6 @@ export async function decide(request) {
     }
     return response(request, 'step_up', 'step_up_required', 'step_up_required');
   }
+  bindNoteOwner(noteKey, request.subjectId);
   return response(request, 'allow', 'approved', 'device_registered');
 }
