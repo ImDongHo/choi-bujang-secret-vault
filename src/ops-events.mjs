@@ -1,6 +1,7 @@
 // 12단계: 탈환 작전실이 읽는 서버 기록(public.ops_events)을 남깁니다.
 // - 모든 자료·세션 API 응답에 요청 ID(X-Request-Id)를 붙이고, 응답을 보내기 전에 한 줄을 기록합니다.
-// - 기록하는 값: 요청 ID·시각·검증된 사용자 ID(로그인 검사를 통과했을 때만)·서비스·요청 종류·경로 모양·상태 코드·결과·오류 코드.
+// - 기록하는 값: 요청 ID·시각·검증된 사용자 ID(로그인 검사를 통과했을 때만)·서비스·요청 종류·경로 모양·상태 코드·결과·오류 코드,
+//   그리고 점검 요청이 X-Aleph-Attack-Id 헤더로 보낸 점검 이름(attackId, 형식이 맞을 때만).
 // - 메모 제목·본문·토큰·비밀번호·이메일·기기 번호·쿼리 원문은 기록하지 않습니다.
 // - 서버 로그(Vercel Logs)에는 사용자 ID 대신 SHA-256 앞 8자리만 남깁니다(가린 서버 기록).
 // - 기록이 실패해도 원래 응답은 바뀌지 않습니다(기록 실패는 로그에만 남김).
@@ -9,6 +10,8 @@ import { OPS_USER } from './notes-api.mjs';
 
 const REASON = /^[A-Z0-9_]{1,40}$/u;
 const SERVICE = /^[a-z]{1,20}$/u;
+const ATTACK_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u;
+export const ATTACK_HEADER = 'x-aleph-attack-id';
 const RECORD_TIMEOUT_MS = 1500;
 
 export const maskSubject = userId => (userId ? createHash('sha256').update(`ops:${userId}`, 'utf8').digest('hex').slice(0, 8) : '-');
@@ -59,11 +62,13 @@ export function withOpsEvents(service, route, handler) {
     const shape = String(typeof route === 'function' ? route(request) : route).slice(0, 60);
     const method = typeof request.method === 'string' && /^[A-Z]{3,7}$/u.test(request.method) ? request.method : 'OTHER';
     const reason = REASON.test(body?.error ?? '') ? body.error : '';
+    const rawAttack = request.headers?.[ATTACK_HEADER];
+    const attackId = typeof rawAttack === 'string' && ATTACK_ID.test(rawAttack) ? rawAttack : null;
     const recorded = await insertEvent({
       request_id: requestId, owner_id: userId, service, method, route: shape,
-      status, outcome: outcomeOf(status), reason,
+      status, outcome: outcomeOf(status), reason, attack_id: attackId,
     });
-    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'}${recorded ? '' : ' record=failed'}`);
+    console.info(`ops event req=${requestId} sub=${maskSubject(userId)} ${shape} status=${status} reason=${reason || '-'} attack=${attackId ?? '-'}${recorded ? '' : ' record=failed'}`);
 
     response.status(status);
     if (ended === 'json') response.json(body);

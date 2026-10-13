@@ -23,6 +23,11 @@ revoke all on table public.ops_events from public, anon, authenticated;
 grant select, insert on table public.ops_events to service_role;
 revoke truncate, references, trigger, update, delete on table public.ops_events from service_role;
 
+-- 12단계 수정: 제출 묶음·점검 요청이 X-Aleph-Attack-Id 헤더로 보낸 점검 이름(attackId)을 함께 남깁니다(비밀값 아님).
+alter table public.ops_events add column if not exists attack_id text
+  check (attack_id is null or attack_id ~ '^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$');
+create index if not exists ops_events_anon_at on public.ops_events (at desc) where owner_id is null;
+
 commit;
 
 -- [2] 화면 수치와 대조(학생이 SQL Editor에서 직접): 작전실 화면의 '요청 ID'로 그 요청 한 줄을 찾습니다.
