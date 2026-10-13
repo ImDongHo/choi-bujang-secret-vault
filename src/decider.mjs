@@ -18,9 +18,10 @@ const ZONES = Object.freeze([
   { route: 'GET /notes/:id', zone: 'own_notes' },
   { route: 'PUT /notes/:id', zone: 'own_notes' },
   { route: 'DELETE /notes/:id', zone: 'own_notes' },
-  { route: 'GET /notices', zone: 'notices_read' },
-  { route: 'GET /notices/:id', zone: 'notices_read' },
-  { route: 'PUT /notices/:id', zone: 'notices_write', instructorOnly: true },
+  // 공지 구역은 읽기·수정 모두 강사 전용입니다. 계약에 강사 역할이 없으므로 판정기에서는 누구든 거부합니다.
+  { route: 'GET /notices', zone: 'notices', instructorOnly: true },
+  { route: 'GET /notices/:id', zone: 'notices', instructorOnly: true },
+  { route: 'PUT /notices/:id', zone: 'notices', instructorOnly: true },
   { route: 'POST /auth/login', zone: 'session' },
   { route: 'POST /auth/refresh', zone: 'session' },
   { route: 'POST /auth/logout', zone: 'session' },
@@ -33,8 +34,7 @@ const DEVICE_ID = /^[0-9a-f]{16}$/u;
 // 엔진이 확인한 service로도 구역을 나눕니다. 서비스와 경로가 서로 다른 구역을 가리키면 거부합니다.
 const ZONE_SERVICES = Object.freeze({
   own_notes: new Set(['notes']),
-  notices_read: new Set(['notes', 'notices']),
-  notices_write: new Set(['notes', 'notices']),
+  notices: new Set(['notes', 'notices']),
   session: new Set(['notes', 'auth']),
 });
 

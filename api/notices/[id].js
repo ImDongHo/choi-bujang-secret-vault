@@ -1,5 +1,5 @@
 // /api/notices/:id — 강사 공지 한 건 읽기(GET)·수정(PUT).
-// 8단계: 읽기는 로그인한 사람 누구나, 수정은 DB public.instructors에 저장된 강사만 허용합니다.
+// 8단계: 공지 구역(읽기·수정)은 DB public.instructors에 저장된 강사만 허용합니다. 학생은 403입니다.
 // 화면 메뉴나 요청 본문의 role·isInstructor 같은 값은 믿지 않고, 검증된 사용자 ID로만 강사 여부를 대조합니다.
 // 거부할 때는 자원 ID와 짧은 사유만 기록합니다.
 import { isInstructor, isUuid, logDenied, readNoteInput, requireLogin, resourceId, restTable, toNote, unavailable } from '../../src/notes-api.mjs';
@@ -17,16 +17,16 @@ export default async function handler(request, response) {
   const byId = { id: `eq.${id}`, select: 'id,title,content' };
 
   try {
+    if (!await isInstructor(ctx)) {
+      logDenied(resource, 'instructor_required');
+      return response.status(403).json({ error: 'INSTRUCTOR_REQUIRED' });
+    }
     if (request.method === 'GET') {
       const result = await restTable(ctx, 'notices', { query: byId });
       if (!result.ok || !Array.isArray(result.data)) return unavailable(response);
       return result.data.length ? response.status(200).json(toNote(result.data[0])) : notFound(response);
     }
 
-    if (!await isInstructor(ctx)) {
-      logDenied(resource, 'instructor_required');
-      return response.status(403).json({ error: 'INSTRUCTOR_REQUIRED' });
-    }
     const note = readNoteInput(request);
     if (!note) return response.status(400).json({ error: 'INVALID_NOTICE' });
     const result = await restTable(ctx, 'notices', {
