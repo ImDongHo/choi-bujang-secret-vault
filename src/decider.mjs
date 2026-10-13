@@ -9,11 +9,12 @@
 // 허용 목록에 없는 경로, 쿼리로 기능을 고르는 요청, :id 자리의 기능 이름(export 등)은 거부합니다.
 // 강사 공지 수정은 계약에 강사 역할이 아직 없으므로(docs/DECIDER_REQUEST.md) 누구든 거부합니다.
 // 메모 소유자(A/B) 비교는 판정 요청에 소유자 정보가 없어 자료 API(api/notes/[id].js)가 저장된 owner_id로 합니다.
+// 메모 전체 목록처럼 여러 사람의 자료를 한꺼번에 여는 경로와 공지 쓰기는 누구에게나 거부합니다.
 export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required', 'resource_zone']);
 
 // 엔진 경로 모양(route)과 실제 경로(path) 쌍. /api 접두어가 있는 모양과 없는 모양을 모두 받되 서로 섞이면 거부합니다.
 const ZONES = Object.freeze([
-  { route: 'GET /notes', zone: 'own_notes' },
+  // 메모 전체 목록(GET /notes)은 여러 사람의 자료를 한꺼번에 여는 경로라 판정기에서 열지 않습니다.
   { route: 'POST /notes', zone: 'own_notes' },
   { route: 'GET /notes/:id', zone: 'own_notes' },
   { route: 'PUT /notes/:id', zone: 'own_notes' },
@@ -38,20 +39,6 @@ const ZONE_SERVICES = Object.freeze({
   session: new Set(['notes', 'auth']),
 });
 
-// 메모 자원(notes:<id>)을 처음 허용받은 사용자(subjectId)와 묶어 둡니다. 다른 사용자가 같은 메모를 요청하면 거부합니다.
-// 판정 요청에 소유자 정보가 없으므로, 엔진이 확인한 subjectId와 정확한 경로의 자료 ID만으로 구역을 나눕니다.
-const NOTE_OWNERS = new Map();
-const MAX_BINDINGS = 10000;
-function noteKeyOf(request, zone) {
-  if (zone.zone !== 'own_notes') return null;
-  const id = request.path.split('/').at(-1);
-  return zone.route.endsWith('/:id') ? `notes:${id}` : null;
-}
-function bindNoteOwner(key, subjectId) {
-  if (!key || NOTE_OWNERS.has(key)) return;
-  if (NOTE_OWNERS.size >= MAX_BINDINGS) NOTE_OWNERS.delete(NOTE_OWNERS.keys().next().value);
-  NOTE_OWNERS.set(key, subjectId);
-}
 
 export function matchZone(request) {
   const { method, path, route, queryLength } = request ?? {};
@@ -169,11 +156,7 @@ export async function decide(request) {
     return response(request, 'deny', 'route_not_allowed', 'resource_zone');
   }
   if (zone.instructorOnly) return response(request, 'deny', 'instructor_required', 'resource_zone');
-  const noteKey = noteKeyOf(request, zone);
-  const owner = noteKey ? NOTE_OWNERS.get(noteKey) : undefined;
-  if (owner !== undefined && owner !== request.subjectId) {
-    return response(request, 'deny', 'resource_owner_mismatch', 'resource_zone');
-  }
+  // 메모 한 건의 주인 비교는 자료 API(api/notes/[id].js)가 저장된 owner_id로 합니다.
   const signals = readSignals(request);
   const events = readRecentEvents(request);
   // 출처가 엔진 값(none·judge_fixture)이 아니거나 형식이 틀린 접속 정보는 믿지도, 정상으로 채우지도 않고 다시 확인합니다.
@@ -185,6 +168,5 @@ export async function decide(request) {
     }
     return response(request, 'step_up', 'step_up_required', 'step_up_required');
   }
-  bindNoteOwner(noteKey, request.subjectId);
   return response(request, 'allow', 'approved', 'device_registered');
 }
