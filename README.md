@@ -285,6 +285,15 @@
 - 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
 - 수정(심판 `X01_CLEAR_NOT_BLOCKED`, 커밋 `c25583f`): 판정자처럼 실행기·경보·`decide.mjs`만 따로 두고 돌리면 `decide.mjs`가 `read-alerts.mjs`·`patterns.json`을 찾지 못해 실행이 멈췄습니다. `decide.mjs`가 다른 파일을 import하거나 읽지 않도록 패턴 값(`patterns.json`과 같은 값)과 항목 추출을 파일 안에 넣었습니다. 격리 실행 결과도 block 10 · alert 9 · record 9입니다.
 
+## 보너스 xdr-03: 알려진 취약점 악용을 잡아 냅니다
+
+- 실행: `npm run xdr:run -- known-cve` → `xdr/known-cve/result.json`. 이어서 `node xdr/known-cve/respond.mjs` → 거부 규칙 `xdr/known-cve/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/known-cve.json`은 고치지 않습니다.
+- `read-alerts.mjs`(확인용, decide.mjs가 불러오지 않음): 시각·출발 주소·계정·규칙 수준·설명만 뽑고 비밀값처럼 보이는 값은 가림. `node xdr/known-cve/read-alerts.mjs` → 경보 24건·뽑은 줄 24줄 일치.
+- `patterns.json`: 근거가 있는 패턴 셋만 둡니다. `log4shell-lookup-header`(요청 머리글의 `${jndi:<프로토콜>:` 원격 조회 구문), `log4shell-lookup-param`(주소 인자의 같은 구문), `known-scanner-trace`(점검 도구 흔적, 조회 구문과 함께일 때만). 근거는 CVE-2021-44228(NVD)·MITRE ATT&CK T1190·CISA AA21-356A이고, 패턴마다 한 줄씩 적었습니다.
+- `decide.mjs`: 같은 패턴을 파일 맨 위 상수로 두고, import·파일 읽기/쓰기·바깥 요청 없이 계산합니다. 완전한 조회 구문이 있으면 0.88부터 시작해 머리글·인자 둘 다·점검 흔적·5번 이상 반복·규칙 수준 12 이상이면 더해 block(0.85 이상). CVE 이름·jndi 낱말·잘린 형태처럼 완전한 구문이 없는 T1190 의심은 alert(0.6~0.65), 근거가 없으면 record(0.05). reason에는 패턴 이름만 적고 조회 구문 원문은 옮기지 않습니다.
+- `respond.mjs`: block 결과만 출발 주소 단위 거부 규칙(만료 60분, 근거 경보 번호)으로 넣고, record로 판단된 주소는 넣지 않습니다. 판정기(`src/decider.mjs`)의 기존 규칙은 고치지 않았습니다. 판정 요청 계약에 출발 주소가 없어 xdr-01·02와 같이 `deny-rules.json`과 `isDenied()`로 확인합니다.
+- 결과(로컬, 2026-10-13): block 8 · alert 8 · record 8, 정상 이벤트 block 0건. 다시 흘리기에서 명확한 공격 8건만 막히고 정상 요청 8건은 모두 통과, 거부 규칙 7개. 아무것도 없는 격리 환경에서 decide.mjs 한 파일만 불러와도 같은 건수입니다. 심판의 격리 실행 결과는 제출 뒤 확인합니다.
+
 ## 보너스 xdr-02: 웹 주입 공격을 잡아 냅니다
 
 - 실행: `npm run xdr:run -- web-injection` → `xdr/web-injection/result.json`. 이어서 `node xdr/web-injection/block-rules.mjs` → `xdr/web-injection/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본은 고치지 않습니다.
