@@ -28,6 +28,10 @@
   - 메모·공지·복원 API(`/api/notes`, `/api/notes/:id`, `/api/notices`, `/api/notices/:id`, `/api/restore/:id`)는 학생 토큰이면 서버가 이 기기를 승인된 등록 기기로 확인한 뒤에만 자료를 주고, 아니면 403 `DEVICE_NOT_APPROVED`(`deviceStatus`: none·pending·revoked). 화면도 승인 전에는 자료 API를 부르지 않고 자료를 표시하지 않습니다. 심판 토큰은 반 엔진이 기기를 확인해 넘기므로(`deviceRegistered`) 기존 결과를 유지합니다.
   - 배포 뒤에는 A·B 모두 각 브라우저에서 한 번 '이 기기 승인 요청' → Supabase에서 승인해야 기존 자료실이 열립니다.
 - 확인(로컬, 가짜 DB·가짜 토큰·Playwright, 2026-10-13): 쿠키 없음·승인 대기·회수·위조 쿠키·B가 A의 승인 쿠키 사용 → 403, 버튼을 다시 눌러도 pending 그대로, Supabase 승인 뒤 자기 메모 200, 무로그인 401, 없는 동작 404. 화면: 승인 전 자료 요청 없음·자료 표시 없음, 승인 뒤 기존 목록·추가 정상, 저장소에 기기 번호 없음. `decider:test`·`fixture:7`·`detect:test`·`policy:diff`·`test:r5`·`test:package`·xdr 시험 통과.
+- 키 노출 수정(심판 S11_KEY_EXPOSED 뒤): 화면은 로그인 세션도 브라우저 저장소에 넣지 않고 페이지 메모리에만 둡니다(새로고침하면 다시 로그인). `src/attack-check.mjs`는 공개 키 값을 코드에 두지 않고 `npm run bundle` 실행 때 환경변수 `SUPABASE_PUBLISHABLE_KEY`로만 받으며, 값이 없으면 Data API 직접 점검 두 건은 미실행으로 남깁니다. 이전 커밋 기록에는 예전 화면에 있던 공개 키가 남아 있습니다.
+- 서명 검증은 구현하지 않았습니다. 기기 확인은 서버가 발급한 HttpOnly 기기 쿠키와 학습 DB의 승인 상태로만 합니다.
+- 다시 실행: Vercel이 main을 배포한 뒤 화면에서 로그인 → '이 기기 승인 요청' → Supabase SQL Editor에서 승인(`supabase/step11-device-registrations.sql` [2]) → '승인 상태 다시 확인'. 정상: 승인 뒤에만 메모가 보이고, 개발자 도구 Application의 Local Storage·Session Storage·IndexedDB가 비어 있음. 거부: 승인 전·요청 버튼만 누른 뒤 `/api/notes`는 403 `DEVICE_NOT_APPROVED`. 로컬 점검은 `npm run bundle`.
+- 11단계 결과(학생, 2026-10-13): 커밋 `55910aa`로 통과.
 - 10단계 결과(학생, 2026-10-13): 커밋 `638ab53`로 통과.
 
 ### 10단계 기능 (유지)
