@@ -22,6 +22,9 @@ const EVENT_LIMIT = 200;
 const DETECT_RULE_IDS = Object.freeze(['burst_read']);
 
 const notRun = reason => ({ status: 'not_run', reason });
+// 판정기·탐지 규칙은 코드에 적힌 이름일 뿐 실제 판정 결과가 아닙니다. 실제 판정·회수는 반 엔진 경로라 이 서버 기록에 없으므로 not_run입니다.
+const RULES_SECTION = Object.freeze({ status: 'not_run', reason: 'ENGINE_DECISIONS_NOT_IN_SERVER_RECORD',
+  source: 'src/decider.mjs RULE_IDS · src/detect.mjs (코드에 적힌 이름)', decider: [...RULE_IDS], detect: [...DETECT_RULE_IDS] });
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -120,13 +123,13 @@ async function anonymousView(request, response) {
     requestId: response.getHeader('X-Request-Id') ?? null,
     checkedAt: new Date().toISOString(),
     subject: '-',
-    rules: { status: 'confirmed', source: 'src/decider.mjs RULE_IDS · src/detect.mjs', decider: [...RULE_IDS], detect: [...DETECT_RULE_IDS] },
+    rules: RULES_SECTION,
     events,
     devices: notRun('LOGIN_REQUIRED_FOR_SECTION'),
     recovery: { policy: safePolicy(), backups: notRun('LOGIN_REQUIRED_FOR_SECTION'), restores: notRun('LOGIN_REQUIRED_FOR_SECTION') },
   };
   const e = events?.status === 'confirmed' ? events : null;
-  console.info(`ops summary req=${summary.requestId} scope=anonymous rules=${RULE_IDS.length}+${DETECT_RULE_IDS.length}`
+  console.info(`ops summary req=${summary.requestId} scope=anonymous rules=not_run(${RULE_IDS.length}+${DETECT_RULE_IDS.length} in code)`
     + ` events=${e ? `${e.total}(allowed=${e.allowed},denied=${e.denied},error=${e.error})` : `not_run(${events?.reason})`}`
     + ` attacks=${e ? e.records.filter(row => row.attackId).length : 'not_run'} devices=not_run backups=not_run restores=not_run`);
   return response.status(200).json(summary);
@@ -150,7 +153,7 @@ async function handler(request, response) {
     requestId: response.getHeader('X-Request-Id') ?? null,
     checkedAt: new Date().toISOString(),
     subject: maskSubject(ctx.userId),
-    rules: { status: 'confirmed', source: 'src/decider.mjs RULE_IDS · src/detect.mjs', decider: [...RULE_IDS], detect: [...DETECT_RULE_IDS] },
+    rules: RULES_SECTION,
     events, devices, recovery,
   };
   const n = section => (section?.status === 'confirmed' ? section : null);
@@ -160,7 +163,7 @@ async function handler(request, response) {
   const r = n(recovery?.restores);
   const p = n(recovery?.policy);
   // 화면과 같은 수치를 사용자 ID를 가린 한 줄로 남깁니다(가린 서버 기록). 읽지 못한 항목은 not_run으로 적습니다.
-  console.info(`ops summary req=${summary.requestId} sub=${summary.subject} rules=${RULE_IDS.length}+${DETECT_RULE_IDS.length}`
+  console.info(`ops summary req=${summary.requestId} sub=${summary.subject} rules=not_run(${RULE_IDS.length}+${DETECT_RULE_IDS.length} in code)`
     + ` events=${e ? `${e.total}(allowed=${e.allowed},denied=${e.denied},error=${e.error})` : `not_run(${events.reason})`}`
     + ` devices=${d ? `${d.total}(approved=${d.approved},pending=${d.pending},revoked=${d.revoked})` : `not_run(${devices.reason})`}`
     + ` backups=${b ? b.count : 'not_run'} restores=${r ? r.count : 'not_run'} policy=${p ? p.version : 'not_run'}`);

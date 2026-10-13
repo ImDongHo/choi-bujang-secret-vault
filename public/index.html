@@ -456,7 +456,7 @@
 
     // 화면에는 서버 응답의 수치를 그대로 씁니다. 같은 응답의 가린 기록(records)은 대조용으로만 다시 세고, 다르면 「불일치」로 표시합니다(수치를 고쳐 쓰지 않음).
     function recordsTable(caption, columns, records) {
-      const wrap = el('details');
+      const wrap = el('details', undefined, { open: '' }); // 수치 옆에서 바로 대조할 수 있게 기본으로 펼쳐 둡니다.
       wrap.append(el('summary', `${caption} ${records.length}줄 보기`));
       const box = el('div', undefined, { class: 'table-wrap' });
       const table = el('table');
@@ -486,9 +486,13 @@
       opsMeta.textContent = `${scopeText} · 서버 응답 요청 ID ${data.requestId ?? '없음'} · 확인 시각 ${localTime(data.checkedAt)}`;
       const cards = [];
       const rules = data.rules;
+      // 규칙 이름은 코드에 적힌 것일 뿐 실제 판정 결과가 아니므로, 서버가 확인됨이라고 줄 때만 확인됨으로 표시합니다.
+      const ruleNames = Array.isArray(rules?.decider) ? [`코드에 적힌 판정기 규칙 ${rules.decider.length}개: ${rules.decider.join(', ')}`, `코드에 적힌 탐지 규칙 ${rules.detect.length}개: ${rules.detect.join(', ')}`] : [];
       cards.push(isConfirmed(rules)
-        ? opsCard('rules', [`판정기 규칙 ${rules.decider.length}개: ${rules.decider.join(', ')}`, `탐지 규칙 ${rules.detect.length}개: ${rules.detect.join(', ')}`], 'confirmed')
-        : opsCard('rules', [notRunText(rules)], 'not_run'));
+        ? opsCard('rules', ruleNames, 'confirmed')
+        : opsCard('rules', [rules?.reason === 'ENGINE_DECISIONS_NOT_IN_SERVER_RECORD'
+          ? '미실행: 실제 판정·탐지·회수 결과는 반 엔진 경로라 이 서버 기록에 없습니다(ENGINE_DECISIONS_NOT_IN_SERVER_RECORD).'
+          : notRunText(rules), ...ruleNames], 'not_run'));
 
       const events = data.events;
       if (isConfirmed(events) && Array.isArray(events.records)) {
