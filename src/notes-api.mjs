@@ -3,6 +3,7 @@
 // 브라우저가 보낸 userId·role·owner_id는 읽지 않습니다.
 // SUPABASE_URL, SUPABASE_SECRET_KEY는 Vercel 환경변수에서만 읽고 응답·로그에 넣지 않습니다.
 // 4단계: 모든 읽기·추가·수정·삭제를 검증된 사용자 ID와 DB의 owner_id가 같을 때만 허용합니다.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from './verify-login.mjs';
 
@@ -98,7 +99,7 @@ export function notesTable(ctx, options) {
   return restTable(ctx, 'notes', options);
 }
 
-const TABLES = new Set(['notes', 'notices', 'instructors']);
+const TABLES = new Set(['notes', 'notices', 'instructors', 'notes_backup', 'notes_restore_audit']);
 export async function restTable(ctx, table, { method = 'GET', query = {}, body, prefer } = {}) {
   if (!TABLES.has(table)) throw new TypeError('unknown_table');
   const endpoint = new URL(`/rest/v1/${table}`, ctx.url);
@@ -124,6 +125,11 @@ export async function isInstructor(ctx) {
   const result = await restTable(ctx, 'instructors', { query: { select: 'user_id', user_id: `eq.${ctx.userId}`, limit: '1' } });
   if (!result.ok || !Array.isArray(result.data)) throw new Error('instructor_lookup_failed');
   return result.data.length === 1;
+}
+
+// 10단계: 메모 내용 해시(UTF-8 SHA-256, 16진수). 학습 DB의 encode(sha256(convert_to(content,'UTF8')),'hex')와 같은 값입니다.
+export function contentHash(text) {
+  return createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
 export function unavailable(response) {

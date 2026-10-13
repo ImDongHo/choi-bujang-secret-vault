@@ -18,7 +18,39 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 9단계 저장점
+## 현재 상태: 10단계 저장점
+
+- 10단계(백업에서 자료실을 되살립니다). 운영 정책(판정기 `src/decider.mjs`, 자료 API `api/*`)은 정책 파일을 읽지 않으며, 정책 비교·복원은 `policy/` 아래 시험 정책만 다룹니다.
+- 정책 차이 보기(만들기 1): `npm run policy:diff`. `policy/safe-policy.json`(8단계 심판 통과 커밋 `b9d601a`의 구역 규칙을 옮긴 안전 사본, 버전 `step8-verified-b9d601a`)을 `policy/safe-policy.sha256`과 대조해 검증하고, 사본이 없거나 해시가 다르면 중단합니다. 통과하면 복원할 버전·현재 시험 정책 버전·변경 범위(되살림·되돌림·지움)·보존할 다른 서비스를 보여 줍니다.
+- 정책 되돌리기(만들기 2): `npm run policy:restore`는 미리보기만 하고, `npm run policy:restore -- --yes`일 때만 `policy/test-policy.json`을 안전 사본으로 되돌립니다. 안전 사본에 있는 서비스(`notes`·`notices`·`auth`)만 바꾸고, 사본에 없는 다른 서비스(지금은 `restore`)는 보존하며, `policy/audit.log`에는 한 줄씩 덧붙이기만 합니다.
+  - 확인(임시 폴더에서 침해된 시험 정책으로 실제 실행, 2026-10-13): 침해 정책에서 B의 A 메모 `allow` → 복원 뒤 `deny`, A 자기 메모 `allow` 유지, 메모 전체 목록·공지 DELETE `deny`, 다른 서비스 보존, 기존 감사 줄 보존. 사본 위조·삭제 시 아무것도 바꾸지 않고 중단.
+- 메모 한 건 복원(만들기 3): 서비스 `notes`, 경로 **`POST /api/restore/:id`**(`aleph.config.json`의 `restoreRoute`·`allowedRoutes`, 판정기 구역 `POST /restore/:id`). 학습 DB의 비공개 사본 `public.notes_backup`(메모 5건, 내용 SHA-256 포함)과 추가 전용 감사 기록 `public.notes_restore_audit`를 만들었습니다(`supabase/step10-notes-backup.sql`, 적용함, `anon`·`authenticated` 권한 없음, 서버는 사본 SELECT와 감사 SELECT·INSERT만).
+  - 동작: 로그인한 사용자가 **자기 소유 사본**의 메모 한 건만 복원합니다(남의 사본·없는 사본 404). 사본의 내용 해시가 맞지 않으면 409, 요청이 보낸 `contentSha256`과 다르면 409. 그 한 건만 넣거나(`inserted`) 고치고(`updated`), 복원 뒤 ID·소유자·내용 해시를 다시 읽어 사본과 대조합니다. 감사 기록에 한 줄 추가하며, 다른 메모·사본·감사 기록은 바꾸지 않습니다. 응답은 `{id, action, contentSha256}`이고 메모 내용은 응답·로그에 넣지 않습니다.
+  - 시험 계정 B의 메모 `b0000000-0000-4000-8000-000000000001`(사본 해시 `63ce60f587f7…`)로만 확인합니다. 로컬 가짜 DB 시험: 지운 뒤 복원 inserted·망가진 뒤 복원 updated·ID·소유자·해시 일치, 남의 사본 404, 해시 다름 409, 변조된 사본 409, 무로그인 401, 쿼리 400, GET 405, 다른 메모 그대로.
+- 9단계 결과(학생, 2026-10-13): 커밋 `be4acff`로 통과, 심판 공격 넷 모두 격파.
+
+### 복구 뒤 다시 시험할 순서 (만들기 4)
+
+아래는 복구 뒤 1~9단계 정상·금지 요청을 다시 확인하는 순서입니다. **결과 칸은 실제로 실행한 것만 적고, 실행하지 않은 것은 미실행으로 둡니다.** 배포 주소는 `https://choi-bujang-secret-vault-eta-five.vercel.app`, 토큰은 화면 개발자 도구에서만 쓰고 기록하지 않습니다.
+
+| 순서 | 단계 | 요청 | 기대 | 결과 |
+|---|---|---|---|---|
+| 0 | 10 | `npm run policy:diff` | 검증 통과, 차이 없음(또는 복원 뒤 차이 없음) | 2026-10-13 로컬 실행: 검증 통과·차이 없음 |
+| 1 | 10 | B 로그인 → B 메모 삭제 → `POST /api/restore/b0000000-…-0001` | 200 `inserted`, 화면에 B 메모 다시 보임 | 미실행 |
+| 2 | 1·2 | 시크릿 창 `/data.json` | 404 | 미실행 |
+| 3 | 2·5 | `/aleph.json` | step 10, `allowedRoutes`·`originalApiUrl`·`restoreRoute` 확인 | 미실행 |
+| 4 | 3 | 무로그인 `GET /api/notes` | 401 | 미실행 |
+| 5 | 3 | A 로그인 → 메모 추가·수정·삭제 | 201·200·204 | 미실행 |
+| 6 | 4 | B 로그인 → `GET /api/notes/<A메모id>` | 404 | 미실행 |
+| 7 | 4 | 수정 본문에 다른 `owner_id` | 403 | 미실행 |
+| 8 | 5 | 공개 키로 `…/rest/v1/notes` 직접 요청 | 401·403, 메모 없음 | 미실행 |
+| 9 | 5 | 첫 화면 소스에 `sb_publishable` 없음 | 0건 | 미실행 |
+| 10 | 6·7 | `npm run decider:test`, `npm run fixture:7` | 4줄 통과, allow/step_up | 2026-10-13 로컬 실행: 통과 |
+| 11 | 8 | B 로그인 → `GET /api/notices`, `GET /api/notes?owner_id=x` | 403, 400 | 미실행 |
+| 12 | 9 | `npm run detect:test` | 6줄 통과 | 2026-10-13 로컬 실행: 통과 |
+| 13 | 10 | A 로그인 → `POST /api/restore/b0000000-…-0001`(남의 사본) | 404 | 미실행 |
+
+### 9단계 기능 (유지)
 
 - 9단계(도플갱어를 찾고 권한을 거둡니다). 탐지는 회수 **제안**만 만듭니다. 회수 API를 만들거나 기기 권한을 바꾸지 않았고, 실제 사건 전달·회수와 시간은 반 엔진·심판이 확인합니다(미실행).
 - `src/detect.mjs`(계약 `docs/DETECT_EVENTS.md`): 사건에서 가명 사용자(`identity.sub`)·요청 종류(`method`)·시각(`at`)만 읽고, 메모 내용·토큰·실명 같은 다른 값은 읽거나 저장·출력하지 않습니다. 규칙 `burst_read`: 같은 사용자의 GET이 어느 10분 구간에서든 120건을 넘을 때만 `{action:'propose_revocation', reasonCode:'burst_read', subject}`, 그 밖에는 `{action:'observe'}`.

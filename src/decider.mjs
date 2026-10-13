@@ -19,6 +19,8 @@ const ZONES = Object.freeze([
   { route: 'GET /notes/:id', zone: 'own_notes' },
   { route: 'PUT /notes/:id', zone: 'own_notes' },
   { route: 'DELETE /notes/:id', zone: 'own_notes' },
+  // 10단계: 비공개 사본에서 자기 메모 한 건 복원(주인·해시 대조는 자료 API가 함)
+  { route: 'POST /restore/:id', zone: 'own_notes' },
   // 공지 구역은 읽기·수정 모두 강사 전용입니다. 계약에 강사 역할이 없으므로 판정기에서는 누구든 거부합니다.
   { route: 'GET /notices', zone: 'notices', instructorOnly: true },
   { route: 'GET /notices/:id', zone: 'notices', instructorOnly: true },

@@ -209,11 +209,23 @@ async function stepNineChecks(app, config) {
   ]);
 }
 
+// 10단계: 복원 경로(restoreRoute)를 토큰 없이 불러 거부되는지 봅니다. B 계정 복원은 토큰이 필요해 미실행으로 남깁니다.
+async function stepTenChecks(app, config) {
+  const restore = new URL('/api/restore/b0000000-0000-4000-8000-000000000001', app);
+  return (await stepNineChecks(app, config)).concat([
+    { attackId: 'anonymous_note_restore', expected: '토큰 없는 POST /api/restore/:id는 401',
+      observed: await sendRequest(restore, { method: 'POST', body: {} }) },
+    { attackId: 'restore_one_note_hash_match', expected: 'B 로그인으로 B 메모 한 건 복원, ID·소유자·내용 해시가 사본과 같음',
+      observed: '미실행: B 토큰이 필요해 화면 개발자 도구로 직접 확인' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 10) return stepTenChecks(app, config);
   if (config.step === 9) return stepNineChecks(app, config);
   if (config.step === 8) return stepEightChecks(app, config);
   if (config.step === 7) return stepSevenChecks(app, config);

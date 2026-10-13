@@ -1,0 +1,63 @@
+{
+  "schema": "aleph.policy.v1",
+  "version": "test-current",
+  "note": "현재 시험 정책입니다. 침해 시험과 복원 절차는 이 파일만 바꿉니다. 운영 판정기·자료 API 코드는 이 파일을 읽지 않습니다.",
+  "services": {
+    "notes": [
+      {
+        "route": "GET /notes",
+        "allow": "none"
+      },
+      {
+        "route": "POST /notes",
+        "allow": "owner"
+      },
+      {
+        "route": "GET /notes/:id",
+        "allow": "owner"
+      },
+      {
+        "route": "PUT /notes/:id",
+        "allow": "owner"
+      },
+      {
+        "route": "DELETE /notes/:id",
+        "allow": "owner"
+      }
+    ],
+    "notices": [
+      {
+        "route": "GET /notices",
+        "allow": "instructor"
+      },
+      {
+        "route": "GET /notices/:id",
+        "allow": "instructor"
+      },
+      {
+        "route": "PUT /notices/:id",
+        "allow": "instructor"
+      }
+    ],
+    "auth": [
+      {
+        "route": "POST /auth/login",
+        "allow": "session"
+      },
+      {
+        "route": "POST /auth/refresh",
+        "allow": "session"
+      },
+      {
+        "route": "POST /auth/logout",
+        "allow": "session"
+      }
+    ],
+    "restore": [
+      {
+        "route": "POST /restore/:id",
+        "allow": "owner"
+      }
+    ]
+  }
+}
