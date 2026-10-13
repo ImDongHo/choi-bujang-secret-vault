@@ -30,6 +30,13 @@ const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u;
 const RESERVED_SEGMENTS = new Set(['export', 'import', 'download', 'backup', 'dump', 'bulk', 'batch', 'all',
   'admin', 'search', 'list', 'new', 'edit', 'update', 'delete', 'raw', 'share', 'restore']);
 const DEVICE_ID = /^[0-9a-f]{16}$/u;
+// 엔진이 확인한 service로도 구역을 나눕니다. 서비스와 경로가 서로 다른 구역을 가리키면 거부합니다.
+const ZONE_SERVICES = Object.freeze({
+  own_notes: new Set(['notes']),
+  notices_read: new Set(['notes', 'notices']),
+  notices_write: new Set(['notes', 'notices']),
+  session: new Set(['notes', 'auth']),
+});
 
 // 메모 자원(notes:<id>)을 처음 허용받은 사용자(subjectId)와 묶어 둡니다. 다른 사용자가 같은 메모를 요청하면 거부합니다.
 // 판정 요청에 소유자 정보가 없으므로, 엔진이 확인한 subjectId와 정확한 경로의 자료 ID만으로 구역을 나눕니다.
@@ -158,7 +165,9 @@ export async function decide(request) {
     return response(request, 'deny', 'subject_not_verified', 'resource_zone');
   }
   const zone = matchZone(request);
-  if (!zone) return response(request, 'deny', 'route_not_allowed', 'resource_zone');
+  if (!zone || !ZONE_SERVICES[zone.zone]?.has(request.service)) {
+    return response(request, 'deny', 'route_not_allowed', 'resource_zone');
+  }
   if (zone.instructorOnly) return response(request, 'deny', 'instructor_required', 'resource_zone');
   const noteKey = noteKeyOf(request, zone);
   const owner = noteKey ? NOTE_OWNERS.get(noteKey) : undefined;
