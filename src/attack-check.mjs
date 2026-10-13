@@ -291,42 +291,36 @@ async function stepElevenChecks(app, config) {
 const WRITE_NOT_RUN = 'not_run: 쓰기 요청(POST·PUT·DELETE)이라 격리 환경 제출 묶음에서 보내지 않음';
 // 서버 함수를 거쳐 ops_events에 남는 점검(정적 파일 /data.json은 서버 함수를 거치지 않아 제외)
 const SERVER_RECORDED_IDS = ['anonymous_api_list_read', 'anonymous_other_note_read', 'anonymous_notice_read', 'anonymous_device_status'];
-async function stepTwelveChecks(app, config) {
-  const notes = new URL('/api/notes', app);
-  const otherNote = new URL('/api/notes/b0000000-0000-4000-8000-000000000001', app);
-  const notice = new URL('/api/notices/c0000000-0000-4000-8000-000000000001', app);
-  const AUTH_NOT_RUN = 'not_run: Authorization 헤더가 붙은 요청이라 격리 환경 제출 묶음에서 보내지 않음(화면 실측 표에서 확인)';
-  const get = (attackId, url) => sendRequest(url, { attackId });
-  const staticFile = await countNotes(new URL('/data.json', app), 'anonymous_static_note_read');
-  const results = [
-    { attackId: 'anonymous_static_note_read', expected: '2단계: 공개 GET /data.json에서 메모 0건 또는 404',
-      observed: fit(`${staticFile.sent} → ${staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건`}`) },
-    // 1첩반상: 무인증 목록 조회에 이어 같은 제출본에서 다른 사람(B)의 메모 한 건을 연속 조회합니다.
-    { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: await get('anonymous_api_list_read', notes) },
-    { attackId: 'anonymous_other_note_read', expected: '4단계: 토큰 없는 GET /api/notes/:id(B 메모)는 401, 메모 없음', observed: await get('anonymous_other_note_read', otherNote) },
-    { attackId: 'forged_token_list_read', expected: '3단계: 서명 없는 가짜 토큰의 GET /api/notes는 401', observed: AUTH_NOT_RUN },
-    { attackId: 'forged_token_other_note_read', expected: '4단계: 서명 없는 가짜 토큰의 GET /api/notes/:id(B 메모)는 401', observed: AUTH_NOT_RUN },
-    { attackId: 'anonymous_api_note_create', expected: '3단계: 토큰 없는 POST /api/notes는 401', observed: WRITE_NOT_RUN },
-    { attackId: 'anonymous_api_note_update', expected: '3단계: 토큰 없는 PUT /api/notes/:id는 401', observed: WRITE_NOT_RUN },
-    { attackId: 'anonymous_api_note_delete', expected: '3단계: 토큰 없는 DELETE /api/notes/:id는 401', observed: WRITE_NOT_RUN },
-    { attackId: 'anon_data_api_note_read', expected: '5단계: 공개 키로 원본 Data API 메모 직접 조회(GET)는 거부', observed: await sendDataApi(config) },
-    { attackId: 'anonymous_notice_read', expected: '8단계: 토큰 없는 GET /api/notices/:id는 401', observed: await get('anonymous_notice_read', notice) },
-    { attackId: 'anonymous_notice_update', expected: '8단계: 토큰 없는 PUT /api/notices/:id는 401', observed: WRITE_NOT_RUN },
-    { attackId: 'anonymous_note_restore', expected: '10단계: 토큰 없는 POST /api/restore/:id는 401', observed: WRITE_NOT_RUN },
-    { attackId: 'anonymous_device_status', expected: '11단계: 토큰 없는 GET /api/device/status는 401', observed: await get('anonymous_device_status', new URL('/api/device/status', app)) },
-    { attackId: 'anonymous_device_request', expected: '11단계: 토큰 없는 POST /api/device/request는 401', observed: WRITE_NOT_RUN },
-  ];
-  // 마지막으로 작전실 요약의 공개 보기(로그인 없는 요청의 가린 서버 기록)를 읽어, 위 점검 이름이 서버 기록에 몇 줄 남았는지 응답 그대로 적습니다.
-  results.push({ attackId: 'ops_summary_anonymous_records', expected: '12단계: 토큰 없는 GET /api/ops/summary는 200 scope anonymous, 위 점검 이름이 붙은 가린 서버 기록이 있음',
-    observed: await readOpsSummary(new URL('/api/ops/summary', app), SERVER_RECORDED_IDS.filter(id => results.some(item => item.attackId === id && !item.observed.startsWith('not_run')))) });
-  results.push(
+async function stepTwelveChecks() {
+  // 12단계 수정: 이 묶음이 보낸 요청은 심판 실행 기록과 대조되지 않았으므로(「그 attackId 로 보낸 요청 기록이 없습니다」),
+  // 격리 환경 제출 묶음에서는 요청을 하나도 보내지 않고 모든 점검의 observed를 not_run으로 적습니다(결과를 지어내지 않음).
+  // 같은 요청의 실제 결과는 배포 화면 탈환 작전실의 「실측 표 만들기」와 학습 DB 가린 서버 기록(ops_events)에서 확인합니다.
+  const NOT_SENT = 'not_run: 격리 환경 제출 묶음에서는 보내지 않음(실제 결과는 배포 화면 실측 표와 가린 서버 기록에서 확인)';
+  const WRITE = 'not_run: 쓰기 요청(POST·PUT·DELETE)이라 격리 환경 제출 묶음에서 보내지 않음';
+  const AUTH = 'not_run: Authorization 헤더가 필요한 요청이라 격리 환경 제출 묶음에서 보내지 않음';
+  return [
+    { attackId: 'anonymous_static_note_read', expected: '2단계: 공개 GET /data.json에서 메모 0건 또는 404', observed: NOT_SENT },
+    // 1첩반상: 무인증 목록 조회와 다른 사람(B)의 메모 한 건 조회
+    { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: NOT_SENT },
+    { attackId: 'anonymous_other_note_read', expected: '4단계: 토큰 없는 GET /api/notes/:id(B 메모)는 401, 메모 없음', observed: NOT_SENT },
+    { attackId: 'forged_token_list_read', expected: '3단계: 서명 없는 가짜 토큰의 GET /api/notes는 401', observed: AUTH },
+    { attackId: 'forged_token_other_note_read', expected: '4단계: 서명 없는 가짜 토큰의 GET /api/notes/:id(B 메모)는 401', observed: AUTH },
+    { attackId: 'anonymous_api_note_create', expected: '3단계: 토큰 없는 POST /api/notes는 401', observed: WRITE },
+    { attackId: 'anonymous_api_note_update', expected: '3단계: 토큰 없는 PUT /api/notes/:id는 401', observed: WRITE },
+    { attackId: 'anonymous_api_note_delete', expected: '3단계: 토큰 없는 DELETE /api/notes/:id는 401', observed: WRITE },
+    { attackId: 'anon_data_api_note_read', expected: '5단계: 공개 키로 원본 Data API 메모 직접 조회(GET)는 거부', observed: NOT_SENT },
+    { attackId: 'anonymous_notice_read', expected: '8단계: 토큰 없는 GET /api/notices/:id는 401', observed: NOT_SENT },
+    { attackId: 'anonymous_notice_update', expected: '8단계: 토큰 없는 PUT /api/notices/:id는 401', observed: WRITE },
+    { attackId: 'anonymous_note_restore', expected: '10단계: 토큰 없는 POST /api/restore/:id는 401', observed: WRITE },
+    { attackId: 'anonymous_device_status', expected: '11단계: 토큰 없는 GET /api/device/status는 401', observed: NOT_SENT },
+    { attackId: 'anonymous_device_request', expected: '11단계: 토큰 없는 POST /api/device/request는 401', observed: WRITE },
+    { attackId: 'ops_summary_anonymous_records', expected: '12단계: 토큰 없는 GET /api/ops/summary는 200 scope anonymous', observed: NOT_SENT },
     { attackId: 'login_trials_table', expected: '1~11단계 로그인 정상 요청 허용·금지 요청 거부를 요청 ID·시각과 함께 표로 남김',
       observed: 'not_run: A 로그인·승인 기기가 필요해 화면 탈환 작전실의 「실측 표 만들기」로 학생이 직접 실행' },
     { attackId: 'engine_path_decisions', expected: '6·7·9단계: 미등록 기기 deny, 복합 이상 step_up, 다량 조회 회수 제안',
       observed: 'not_run: 반 엔진이 보내는 요청(로컬 npm run decider:test·detect:test는 가상 연습)' },
     { attackId: 'judge_trials_41', expected: '심판의 41종 시험', observed: 'not_run: 심판이 실행하며 이 점검은 결과를 받지 않음' },
-  );
-  return results;
+  ];
 }
 
 // 작전실 공개 보기 응답에서 상태 코드·범위·기록 줄 수와, 이번에 보낸 점검 이름이 붙은 줄 수만 꺼냅니다(계산해 채우지 않음).
@@ -350,7 +344,7 @@ export async function runAttackChecks(config) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
-  if (config.step === 12) return stepTwelveChecks(app, config);
+  if (config.step === 12) return stepTwelveChecks();
   if (config.step === 11) return stepElevenChecks(app, config);
   if (config.step === 10) return stepTenChecks(app, config);
   if (config.step === 9) return stepNineChecks(app, config);
