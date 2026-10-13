@@ -18,7 +18,16 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 6단계 저장점
+## 현재 상태: 7단계 저장점
+
+- 7단계(평소와 다른 접속은 다시 확인합니다): `src/decider.mjs`에 규칙 `step_up_required`를 더했습니다. `RULE_IDS` = `['starter.deny', 'device_registered', 'step_up_required']`. 기기 규칙(`device_registered`)은 그대로 먼저 적용됩니다.
+- 접속 정보 출처 구분(만들기 1): `signals.source`가 `none`(실제 경로, 접속 정보 없음)이면 기기 규칙만 적용하고, `judge_fixture`(엔진이 검증해 넘긴 가상 사건)만 가상 사건 규칙에 씁니다. 그 밖의 출처(클라이언트 헤더 등)나 칸이 다르거나 빠진 신호는 믿지 않고 정상값으로 채우지도 않으며 `step_up`으로 다시 확인합니다. 가상 사건에서 빠진 시각·네트워크는 '확인 안 됨'으로 봅니다. `judge_fixture` 신호를 실제 위치 증거로 쓰지 않습니다.
+- 복합 이상 규칙(만들기 2): 새벽 0~5시 + 처음 보는 네트워크(`unusual`) + 최근 10분 읽기·위험 사건 20건 이상이 모두 겹치면 `step_up`·`step_up_required`. 지역(`region`) 하나만으로는 판정하지 않고, 영구 차단(`deny`)하지 않습니다. 사유는 `reasonCode`와 `ruleIds`에 남습니다.
+- 다시 로그인 계약(만들기 3): 판정 요청의 `stepUp: {verified, authAgeSeconds}`(엔진이 확인한 재인증, 0~900초)가 그 계약입니다. 복합 이상이어도 `verified: true`이고 5분(300초) 안에 다시 확인했으면 `allow`, 아니면 `step_up`. 확인 전 실제 자료 차단과 새 로그인 뒤 다시 판정은 반 엔진 재인증 경로에서만 실측할 수 있어 **미실행**입니다. 토큰 원문은 기록하지 않습니다.
+- 확인 순서(로컬 가상 요청 연습, 심판 판정 아님): `npm run decider:test` → `등록 기기의 정상 요청`·`미등록 기기의 가상 요청`·`복합 이상 접속`·`다시 확인한 복합 이상 접속` 네 줄 모두 `통과`. `npm run fixture:7` → `정상 사건: allow`, `복합 이상 사건: step_up`.
+- 실행 기록(2026-10-13): 위 두 명령 모두 기대대로 나왔습니다. 따로 넣어 본 요청 — 위조 출처(평소 값 포함)·신호 칸 추가·신호 없음 → step_up / 출처 none·지역만 다름·시각만·읽기만·1시간 전 읽기 → allow / 시각 빠짐+unusual+읽기 많음 → step_up / 재인증 900초 전·verified 문자열 → step_up / 미등록 기기 → deny.
+
+### 6단계 기능 (유지)
 
 - 6단계(등록한 기기만 자료실에 들어옵니다): `src/decider.mjs`에 규칙 `device_registered`를 넣었습니다. 판정 요청의 `request.deviceRegistered`가 `true`일 때만 `allow`(이유 `approved`), 미등록(`false`)이거나 값이 없으면 `deny`·`device_not_registered`입니다. `RULE_IDS` = `['starter.deny', 'device_registered']`(`starter.deny`는 계약 형식이 아닌 요청 거부에 그대로 사용). `decide(request)` 이름·인자와 응답 다섯 항목은 바꾸지 않았습니다.
 - 판정 요청에서 쓰는 값(`docs/DECIDER_REQUEST.md`): 사용자는 반 엔진이 만든 가명 `subjectId`, 기기는 확인된 16자리 `deviceId`와 등록 여부 `deviceRegistered`로 들어옵니다. 브라우저 값이나 계약 밖 `request.device`·`request.identity`는 쓰지 않습니다. 인증서·CA·서명 키는 만들지 않았고 Git에도 없습니다.

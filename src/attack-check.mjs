@@ -175,11 +175,23 @@ async function stepSixChecks(app, config) {
   ]);
 }
 
+// 7단계: 평소와 다른 복합 접속은 판정기(step_up_required)가 추가 확인으로 보냅니다.
+// 확인 전 자료 차단과 새 로그인 뒤 다시 판정은 반 엔진 경로에서만 실측할 수 있어 미실행으로 남깁니다. 토큰 원문은 기록하지 않습니다.
+async function stepSevenChecks(app, config) {
+  return (await stepSixChecks(app, config)).concat([
+    { attackId: 'compound_anomaly_step_up', expected: '평소와 다른 시각·처음 보는 네트워크·많은 읽기가 겹친 접속은 step_up·step_up_required',
+      observed: '미실행: 실제 접속 사건은 심판·반 엔진이 보냄(로컬 npm run decider:test는 가상 요청 연습)' },
+    { attackId: 'step_up_before_relogin_blocked', expected: '다시 로그인하기 전 자료 요청은 차단, 새 로그인 뒤 요청은 다시 판정해 허용',
+      observed: '미실행: 반 엔진의 재인증 경로가 연결된 환경에서만 실측 가능' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 7) return stepSevenChecks(app, config);
   if (config.step === 6) return stepSixChecks(app, config);
   if (config.step === 5) return stepFiveChecks(app, config);
   if (config.step === 4) return stepFourChecks(app, config);
