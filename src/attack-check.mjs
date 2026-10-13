@@ -20,6 +20,10 @@ const attackHeaders = attackId => (attackId ? { 'x-aleph-attack-id': attackId, '
 // 실행 기록이 주소만 남겨도 어느 점검의 요청인지 알 수 있게 주소 끝에 ?attackId=<점검 이름>도 붙입니다.
 // 로그인 없는 요청은 서버가 로그인 검사를 쿼리 검사보다 먼저 하므로 결과(401)는 바뀌지 않습니다.
 // 심판 격리 환경의 URL에는 searchParams가 없을 수 있어 문자열로 이어 붙입니다(점검 이름은 영문·숫자·_.-만 씀).
+// observed에는 보낸 방식과 경로·쿼리만 적습니다(배포 주소는 config.publicAppUrl과 같음). 제출 묶음은 observed를 300자까지만 받습니다.
+const sentLine = url => `GET ${String(url.href ?? url).replace(/^https:\/\/[^/]+/u, '')}`;
+const fit = text => (text.length <= 300 ? text : `${text.slice(0, 297)}...`);
+
 function tagged(url, attackId) {
   if (!attackId) return url;
   const href = String(url.href ?? url);
@@ -38,7 +42,7 @@ async function countNotes(rawUrl, attackId) {
       // JSON이 아니면 메모 개수를 셀 수 없습니다.
     }
   }
-  return { status: response.status, count, sent: `GET ${url.href}` };
+  return { status: response.status, count, sent: sentLine(url) };
 }
 
 // 2단계: 실제로 보낸 비로그인 요청의 결과만 적습니다. 메모 본문은 기록하지 않습니다.
@@ -82,7 +86,7 @@ async function sendRequest(rawUrl, { method = 'GET', authorization, body, attack
   const serverDate = response.headers?.get?.('date');
   const trace = `${requestId ? `, 요청 ID ${requestId}` : ''}${serverDate ? `, 서버 시각 ${serverDate}` : ''}`;
   // 12단계: 실제로 보낸 요청(방식·전체 주소)을 앞에 적어 심판의 실행 기록과 대조할 수 있게 합니다.
-  return `${method} ${url.href} → HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`;
+  return fit(`${method} ${sentLine(url).slice(4)} → HTTP ${response.status}${count === null ? '' : `, 메모 ${count}건`}${trace}`);
 }
 
 const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -293,7 +297,7 @@ async function stepTwelveChecks(app, config) {
   const staticFile = await countNotes(new URL('/data.json', app), 'anonymous_static_note_read');
   const results = [
     { attackId: 'anonymous_static_note_read', expected: '2단계: 공개 GET /data.json에서 메모 0건 또는 404',
-      observed: `${staticFile.sent} → ${staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건`}` },
+      observed: fit(`${staticFile.sent} → ${staticFile.count === null ? `메모 목록 없음 (HTTP ${staticFile.status})` : `HTTP ${staticFile.status}, 메모 ${staticFile.count}건`}`) },
     // 1첩반상: 무인증 목록 조회에 이어 같은 제출본에서 다른 사람(B)의 메모 한 건을 연속 조회합니다.
     { attackId: 'anonymous_api_list_read', expected: '3단계: 토큰 없는 GET /api/notes는 401', observed: await get('anonymous_api_list_read', notes) },
     { attackId: 'anonymous_other_note_read', expected: '4단계: 토큰 없는 GET /api/notes/:id(B 메모)는 401, 메모 없음', observed: await get('anonymous_other_note_read', otherNote) },
@@ -331,11 +335,11 @@ async function readOpsSummary(rawUrl, sentIds) {
   const requestId = response.headers?.get?.('x-request-id');
   const trace = requestId ? `, 요청 ID ${requestId}` : '';
   const records = Array.isArray(data?.events?.records) ? data.events.records : null;
-  const sent = `GET ${url.href}`;
-  if (!response.ok || !records) return `${sent} → HTTP ${response.status}${data?.scope ? `, scope ${data.scope}` : ''}, 가린 기록 없음${trace}`;
+  const sent = sentLine(url);
+  if (!response.ok || !records) return fit(`${sent} → HTTP ${response.status}${data?.scope ? `, scope ${data.scope}` : ''}, 가린 기록 없음${trace}`);
   const found = sentIds.filter(id => records.some(row => row.attackId === id));
   // 전체 줄 수는 뒤따르는 요청마다 늘어나므로 적지 않고, 이번에 보낸 점검 이름이 붙은 줄만 적습니다.
-  return `${sent} → HTTP ${response.status}, scope ${data.scope}, 점검 이름이 붙은 가린 기록 ${found.length}/${sentIds.length}(${found.join(',') || '없음'})${trace}`;
+  return fit(`${sent} → HTTP ${response.status}, scope ${data.scope}, 점검 이름이 붙은 가린 기록 ${found.length}/${sentIds.length}${trace}`);
 }
 
 export async function runAttackChecks(config) {
