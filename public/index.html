@@ -88,7 +88,8 @@
     // 서버 함수 /api/auth/login·refresh·logout이 Supabase Auth에 대신 요청합니다.
     // 메모 자료도 서버 함수 /api/notes만 부르며, 세션 토큰은 Authorization 헤더로만 보냅니다.
     // 비밀번호와 토큰은 화면·콘솔에 출력하지 않습니다. 사용자 ID·역할·owner_id는 보내지 않습니다.
-    const SESSION_KEY = 'byteback-session';
+    // 11단계: 로그인 세션과 기기 정보는 브라우저 저장소(localStorage·sessionStorage·IndexedDB)에 넣지 않고
+    // 이 페이지의 메모리에만 둡니다. 새로고침하거나 창을 닫으면 다시 로그인합니다.
 
     const status = document.querySelector('#auth-status');
     const form = document.querySelector('#login-form');
@@ -128,12 +129,6 @@
 
     function saveSession(next) {
       session = next;
-      try {
-        if (next) sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
-        else sessionStorage.removeItem(SESSION_KEY);
-      } catch {
-        // 저장소를 쓸 수 없으면 이 탭의 메모리에만 둡니다.
-      }
       render();
     }
 
@@ -380,11 +375,7 @@
       logout.disabled = false;
     });
 
-    try {
-      session = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null');
-    } catch {
-      session = null;
-    }
+    session = null;
     render();
     refreshDeviceAndNotes();
 

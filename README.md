@@ -118,7 +118,7 @@
   - 적용 후 확인(`has_table_privilege`): `anon`·`authenticated` SELECT·INSERT·UPDATE·DELETE 모두 false, `service_role` 모두 true. `role_table_grants`에는 `service_role` 줄만 남음. DB 안에서 `authenticated` 역할로 조회하면 `permission denied`.
   - 배포 설정 `/aleph.json`에도 5단계부터 `originalApiUrl`을 함께 적습니다(`scripts/deployment-identity.mjs`, 쿼리·조각·계정 정보 없는 HTTPS 경로만 허용, 없으면 빌드 실패). 심판이 "배포 설정에 원본 자료 HTTPS 주소가 없습니다"로 알려 준 부분을 고친 것입니다.
   - 배포 설정 `/aleph.json`에 3단계부터 `allowedRoutes`도 함께 적습니다(`"메서드 /경로"` 형식만 허용, 없으면 빌드 실패).
-  - **화면 코드에 Supabase 키가 없습니다.** 로그인도 서버 함수 `POST /api/auth/login`·`/api/auth/refresh`·`/api/auth/logout`(`api/auth/[action].js`)이 서버 환경변수의 키로 Supabase Auth에 대신 요청합니다. 브라우저는 발급된 세션(토큰)을 이 탭의 `sessionStorage`에만 두고 `Authorization: Bearer`로 `/api/notes`를 부릅니다. 토큰이 만료되면 `/api/auth/refresh`로 한 번 갱신합니다. 브라우저 SDK(jsDelivr)와 publishable key는 화면에서 뺐습니다.
+  - **화면 코드에 Supabase 키가 없습니다.** 로그인도 서버 함수 `POST /api/auth/login`·`/api/auth/refresh`·`/api/auth/logout`(`api/auth/[action].js`)이 서버 환경변수의 키로 Supabase Auth에 대신 요청합니다. 브라우저는 발급된 세션(토큰)을 브라우저 저장소에 넣지 않고 이 페이지 메모리에만 두며(11단계, 새로고침하면 다시 로그인) `Authorization: Bearer`로 `/api/notes`를 부릅니다. 토큰이 만료되면 `/api/auth/refresh`로 한 번 갱신합니다. 브라우저 SDK(jsDelivr)와 publishable key는 화면에서 뺐습니다.
   - 4단계 RLS 정책 4개(`auth.uid() = owner_id`)는 그대로 둡니다. 권한이 없으니 쓰이지 않지만, 권한이 실수로 다시 열려도 본인 행만 허용하는 안전장치입니다.
   - 서버 함수의 로그인 검사(`verify-login.mjs`)·소유자 검사·서버 전용 키(Vercel 환경변수)는 바꾸지 않았습니다.
 

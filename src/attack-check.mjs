@@ -103,10 +103,12 @@ async function stepThreeChecks(app, config) {
 }
 
 // 4단계: anon(공개) 키로 Supabase Data API를 직접 불러 메모 테이블이 막혔는지 봅니다.
-// publishable key는 화면에도 들어 있는 공개용 값입니다. 서버 전용 키는 쓰지 않습니다.
-const PUBLISHABLE_KEY = 'sb_publishable_3hpwOdynmaXDwv_r5tjF3Q_zcE7WQTg';
+// 11단계: 키 값은 코드·Git에 두지 않고, npm run bundle을 실행할 때 환경변수 SUPABASE_PUBLISHABLE_KEY로만 받습니다.
+// 값이 없으면 이 점검은 보내지 않고 미실행으로 남깁니다. 서버 전용 키는 쓰지 않습니다.
+const PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? '';
 
 async function sendDataApi(config, { method = 'GET', body } = {}) {
+  if (!PUBLISHABLE_KEY) return '미실행: SUPABASE_PUBLISHABLE_KEY 환경변수가 없어 보내지 않음';
   // 5단계부터는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)을 그대로 씁니다.
   const endpoint = new URL(config.originalApiUrl
     ?? new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin).href);
