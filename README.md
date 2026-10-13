@@ -285,6 +285,22 @@
 - 이 결과는 학생 로컬 실행 결과이며 심판 판정이 아닙니다.
 - 수정(심판 `X01_CLEAR_NOT_BLOCKED`, 커밋 `c25583f`): 판정자처럼 실행기·경보·`decide.mjs`만 따로 두고 돌리면 `decide.mjs`가 `read-alerts.mjs`·`patterns.json`을 찾지 못해 실행이 멈췄습니다. `decide.mjs`가 다른 파일을 import하거나 읽지 않도록 패턴 값(`patterns.json`과 같은 값)과 항목 추출을 파일 안에 넣었습니다. 격리 실행 결과도 block 10 · alert 9 · record 9입니다.
 
+## 보너스 xdr-05: 권한 가로채기를 잡아 냅니다
+
+- 실행: `npm run xdr:run -- privilege` → `xdr/privilege/result.json`. 이어서 `node xdr/privilege/respond.mjs` → 거부 규칙 `xdr/privilege/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/privilege.json`은 고치지 않습니다.
+- `read-alerts.mjs`(확인용, decide.mjs가 불러오지 않음): 시각·출발 주소·계정·규칙 수준·설명만 뽑고 비밀값처럼 보이는 값은 가립니다. `node xdr/privilege/read-alerts.mjs` → 경보 26건·뽑은 줄 26줄 일치.
+- `patterns.json`: 근거가 있는 패턴 셋만 두고, 패턴마다 근거를 한 줄씩 적었습니다.
+  - `admin-group-add`(T1078·T1098.007): 관리자 그룹(administrators 등) 추가·재추가
+  - `unfamiliar-admin-command`(T1068): 처음 보는 주소·다른 계정 권한·방금 관리자가 된 계정의 관리자 명령
+  - `off-hours-privilege-use`(T1078): 수업·업무 시간 밖 관리자 권한 사용
+- `decide.mjs`: 같은 패턴을 파일 맨 위 상수로 두고, import·파일 읽기/쓰기·바깥 요청 없이 계산합니다.
+  - 패턴이 맞으면 0.88부터 시작해 block(0.85 이상)입니다. 여러 패턴·반복(여러 계정, 재추가)·규칙 수준 12 이상이면 더합니다.
+  - 권한 관련 T1068·T1078 경보이지만 패턴이 없으면 alert(0.6), 근거가 없으면 record(0.05)입니다.
+- `respond.mjs`: block 결과만 출발 주소 단위 거부 규칙(만료 60분, 근거 경보 번호)으로 넣고, 계정으로는 막지 않습니다. 판정기(`src/decider.mjs`)의 기존 규칙은 고치지 않았습니다.
+- 결과(로컬, 2026-10-13): block 9 · alert 8 · record 9, 정상 이벤트 block 0건, 거부 규칙 8개.
+  - 다시 흘리기에서 명확한 공격 9건만 막히고 정상 요청 9건은 모두 통과했습니다.
+  - 아무것도 없는 격리 환경에서 decide.mjs 한 파일만 불러와도 같은 건수입니다. 심판의 격리 실행 결과는 제출 뒤 확인합니다.
+
 ## 보너스 xdr-04: 몰래 심어진 프로그램을 찾아냅니다
 
 - 실행: `npm run xdr:run -- persistence` → `xdr/persistence/result.json`. 이어서 `node xdr/persistence/respond.mjs` → 거부 규칙 `xdr/persistence/deny-rules.json`, 알림은 `xdr/alerts.log`에 이어 쌓음. 경보 원본 `xdr/fixtures/persistence.json`은 고치지 않습니다.
