@@ -18,7 +18,19 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 8단계 저장점
+## 현재 상태: 9단계 저장점
+
+- 9단계(도플갱어를 찾고 권한을 거둡니다). 탐지는 회수 **제안**만 만듭니다. 회수 API를 만들거나 기기 권한을 바꾸지 않았고, 실제 사건 전달·회수와 시간은 반 엔진·심판이 확인합니다(미실행).
+- `src/detect.mjs`(계약 `docs/DETECT_EVENTS.md`): 사건에서 가명 사용자(`identity.sub`)·요청 종류(`method`)·시각(`at`)만 읽고, 메모 내용·토큰·실명 같은 다른 값은 읽거나 저장·출력하지 않습니다. 규칙 `burst_read`: 같은 사용자의 GET이 어느 10분 구간에서든 120건을 넘을 때만 `{action:'propose_revocation', reasonCode:'burst_read', subject}`, 그 밖에는 `{action:'observe'}`.
+- `src/decider.mjs` 별도 결과(기존 `decide()` 응답 다섯 항목은 그대로):
+  - `readDetectionInput(request)`: 가명 사용자(`subjectId`)·기기(`deviceId`)·요청 종류(`route`)·판정만 뽑습니다.
+  - `isSuspiciousAccess(request)`: 엔진이 넘긴 가상 사건(`judge_fixture`)에서 처음 보는 네트워크(`unusual`)와 최근 10분 읽기 20건 이상이 **함께** 있을 때만 의심. 지역 하나만으로 확정하지 않고, 출처가 불명확하거나 신호가 빠지면 의심으로 확정하지 않습니다.
+  - `proposeRevocation(request)`: 의심이고 확인된 등록 기기면 `{action:'propose_revocation', reasonCode:'unusual_network_burst_read', target:{deviceId}}`(기기 한 개), 아니면 `{action:'observe'}`.
+- 확인 순서(로컬 가상 사건 연습, 심판 판정 아님): `npm run detect:test` → 6줄 모두 `통과`. `npm run decider:test` 4줄, `npm run fixture:7` allow/step_up 그대로.
+- 실행 기록(2026-10-13): 위 명령 모두 기대대로. 회수 제안 — 정상 사건 observe, 의심 사건(낯선 네트워크+많은 읽기) 기기 1개 제안, 지역만·네트워크만·위조 출처·실제 경로(none)·기기 ID 형식 틀림·미등록 기기 observe.
+- 8단계 결과(학생, 2026-10-13): 최종 커밋 `b9d601a`로 통과, 심판 공격 넷 모두 격파. 아래 8단계 기록 중 판정기의 '처음 쓴 사람과 묶기'와 '공지 읽기 allow', '메모 목록 allow'는 수정 3·5에서 바뀐 옛 기록입니다(현재: 공지 경로 전부 거부, 메모 전체 목록 거부, 주인 비교는 자료 API).
+
+### 8단계 기능 (유지)
 
 - 8단계(자료마다 갈 수 있는 구역을 나눕니다). 화면 메뉴는 바꾸지 않았습니다.
 - 자원 ID(만들기 1): 메모는 `notes:<id>`, 강사 공지는 `notices:<id>`로 서버가 구별합니다(`src/notes-api.mjs`의 `resourceId`). 응답 모양 `{id,title,body}`와 기존 메모 주소는 그대로입니다. 학습 DB에 `public.notices`(공개 가능한 시험 공지 1건)와 강사 권한 목록 `public.instructors`(지금 0명)를 만들었습니다(`supabase/step8-notices.sql`, 적용함). 두 테이블 모두 RLS를 켜고 `anon`·`authenticated` 직접 권한은 없으며, 서버(`service_role`)만 공지 SELECT·UPDATE, 강사 목록 SELECT가 됩니다.
@@ -136,13 +148,13 @@
 4. **현재 배포 파일**: 시크릿 창에서 `<배포주소>/data.json`을 열어 `"notes": []`(또는 404)인지, `<배포주소>/`의 페이지 소스(Ctrl+U)에 메모 문장이 없는지 봅니다. 명령으로는 `curl -s <배포주소>/data.json | grep -c '실습용 가[상]'` → 0이어야 합니다.
 5. **자료 API**: `curl -i <배포주소>/api/notes` → 3단계부터는 `401`과 `{"error":"LOGIN_REQUIRED"}`만 나오고 메모가 없어야 합니다. (2단계 배포에서는 로그인 없이 메모 네 건이 나왔습니다.)
 
-### 검색 결과 기록 (2026-10-06, 5단계 작업 중 갱신)
+### 검색 결과 기록 (2026-10-13, 9단계 작업 중 갱신)
 
 | 확인 대상 | 결과 | 비고 |
 |---|---|---|
 | 현재 작업 파일 | 0건 | `data.json`, `public/data.json` 삭제(이후 수정에서 404로 변경) |
 | 로컬 빌드 결과물 `public/` | 0건 | `npm run build -- --local` 실행 결과 |
-| GitHub 최신 `origin/main` | 0건 | 5단계 작업 중 다시 실행(`origin/main` = `8ecb6d9`). 2단계 작업 중에는 푸시 전이라 8건이었음 |
+| GitHub 최신 `origin/main` | 0건 | 9단계 작업 중 다시 실행(`origin/main` = `b9d601a`). 2단계 작업 중에는 푸시 전이라 8건이었음 |
 | 현재 배포 `/data.json` | 미실행 | 코딩 도구 환경에서는 vercel.app 접속이 막혀 실행하지 못함. 학생이 4번을 직접 실행합니다 |
 | 자료 API `/api/notes` | 미실행 | 3단계 배포 뒤 5번을 실행합니다. 401이 아니라 메모가 나오면 로그인 검사가 배포되지 않은 것입니다 |
 

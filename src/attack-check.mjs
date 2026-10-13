@@ -200,11 +200,21 @@ async function stepEightChecks(app, config) {
   ]);
 }
 
+// 9단계: 탐지(src/detect.mjs burst_read, src/decider.mjs proposeRevocation)는 회수 '제안'만 만듭니다.
+// 실제 사건 전달과 접속 회수는 반 엔진·심판이 확인하므로 여기서는 보내지 않고 미실행으로 남깁니다.
+async function stepNineChecks(app, config) {
+  return (await stepEightChecks(app, config)).concat([
+    { attackId: 'doppelganger_burst_revocation', expected: '처음 보는 네트워크와 갑작스러운 다량 조회가 겹친 기기 한 개에 회수 제안, 실제 회수는 엔진',
+      observed: '미실행: 실제 사건 전달·회수와 시간은 심판·반 엔진이 확인(로컬 npm run detect:test는 가상 사건 연습)' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 9) return stepNineChecks(app, config);
   if (config.step === 8) return stepEightChecks(app, config);
   if (config.step === 7) return stepSevenChecks(app, config);
   if (config.step === 6) return stepSixChecks(app, config);

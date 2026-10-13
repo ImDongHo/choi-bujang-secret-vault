@@ -170,3 +170,42 @@ export async function decide(request) {
   }
   return response(request, 'allow', 'approved', 'device_registered');
 }
+
+// 9단계: 탐지한 사건의 '별도 결과'입니다. decide()의 허용·거부 응답 다섯 항목은 바꾸지 않습니다.
+// 만들기 1: 판정 요청에서 가명 사용자(subjectId)·기기(deviceId)·요청 종류(method·route)·판정만 읽습니다.
+//   메모 내용·토큰·실명은 요청 계약에 없으며, 여기서도 저장하거나 출력하지 않습니다.
+export async function readDetectionInput(request) {
+  const decision = await decide(request);
+  return {
+    subjectId: typeof request?.subjectId === 'string' && request.subjectId ? request.subjectId : null,
+    deviceId: DEVICE_ID.test(request?.deviceId ?? '') ? request.deviceId : null,
+    requestKind: typeof request?.route === 'string' ? request.route : null,
+    decision: decision.decision,
+    reasonCode: decision.reasonCode,
+  };
+}
+
+// 만들기 2: 엔진이 넘긴 가상 사건(judge_fixture)에서 처음 보는 네트워크와 최근 10분 많은 읽기가 함께 있을 때만 의심입니다.
+//   지역(region) 하나만으로는 확정하지 않고, 출처가 불명확하거나 신호가 빠지면 의심으로 확정하지 않습니다.
+export function isSuspiciousAccess(request) {
+  const signals = readSignals(request);
+  if (!signals.trusted || signals.network !== UNFAMILIAR_NETWORK) return false;
+  const reads = readRecentEvents(request)
+    .filter(event => BURST_KINDS.has(event.kind) && event.ageSeconds <= BURST_WINDOW_SECONDS)
+    .reduce((sum, event) => sum + event.count, 0);
+  return reads >= BURST_MIN_COUNT;
+}
+
+// 만들기 3: 의심 사건이면 확인된 가상 기기 한 개를 대상으로 회수 '제안'만 돌려줍니다.
+//   회수 API를 부르거나 기기 권한을 바꾸지 않습니다. 실제 회수와 시간은 반 엔진·심판이 확인합니다.
+export async function proposeRevocation(request) {
+  const input = await readDetectionInput(request);
+  if (!isSuspiciousAccess(request) || !input.deviceId || request?.deviceRegistered !== true || !input.subjectId) {
+    return { action: 'observe' };
+  }
+  return {
+    action: 'propose_revocation',
+    reasonCode: 'unusual_network_burst_read',
+    target: { deviceId: input.deviceId },
+  };
+}
