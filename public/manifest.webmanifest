@@ -1,7 +1,7 @@
 {
   "name": "최부장의 비밀창고",
   "short_name": "비밀창고",
-  "description": "BYTE BACK 방어전 실습용 가상 자료실입니다. 설치해도 기기 확인은 서버 승인으로만 끝납니다.",
+  "description": "BYTE BACK 방어전 연습 자료실입니다. 설치해도 기기 확인은 서버 승인으로만 끝납니다.",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
