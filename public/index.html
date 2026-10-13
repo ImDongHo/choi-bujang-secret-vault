@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BYTE BACK | 점령된 자료실</title>
+  <!-- 11단계: 설치형 웹앱 설정. 설치는 화면을 바로가기로 여는 것일 뿐, 기기 확인을 대신하지 않습니다. -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#101a28">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -31,6 +35,10 @@
     li .buttons { margin-top: 12px; }
     li button { padding: 6px 14px; font-size: 14px; }
     .error { margin-top: 10px; color: #ffb3c0; }
+    .device-state { font-weight: 700; }
+    .device-state[data-state="approved"] { color: #8ad8df; }
+    .device-state[data-state="pending"], .device-state[data-state="none"], .device-state[data-state="revoked"] { color: #ffd38a; }
+    .hint { font-size: 15px; color: #9fb3c8; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -50,6 +58,16 @@
       </form>
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <div id="auth-error" class="error" role="alert"></div>
+    </section>
+    <section class="panel" id="device" aria-labelledby="device-title" hidden>
+      <h2 id="device-title">기기 승인</h2>
+      <p>이 기기 상태: <span id="device-state" class="device-state" data-state="unknown" aria-live="polite">확인하는 중</span></p>
+      <p class="hint">앱으로 설치하거나 승인 요청 버튼을 누른 것만으로는 기기 확인이 끝나지 않습니다. 서버가 이 기기를 등록 기기로 확인한 뒤에만 자료실이 열립니다. 요청 뒤에는 관리자(학생 본인)가 Supabase에서 승인해야 합니다.</p>
+      <div class="buttons">
+        <button type="button" id="device-request">이 기기 승인 요청</button>
+        <button type="button" id="device-refresh" class="secondary">상태 다시 확인</button>
+      </div>
+      <div id="device-error" class="error" role="alert"></div>
     </section>
     <section class="panel" id="editor" aria-labelledby="editor-title" hidden>
       <h2 id="editor-title">가상 메모 추가</h2>
@@ -87,6 +105,17 @@
     const noteSave = document.querySelector('#note-save');
     const noteCancel = document.querySelector('#note-cancel');
     const noteError = document.querySelector('#note-error');
+    const devicePanel = document.querySelector('#device');
+    const deviceStateBox = document.querySelector('#device-state');
+    const deviceRequest = document.querySelector('#device-request');
+    const deviceRefresh = document.querySelector('#device-refresh');
+    const deviceError = document.querySelector('#device-error');
+    // 11단계: 서버가 알려 준 기기 상태만 씁니다(none·pending·approved·revoked). 기기 번호는 HttpOnly 쿠키라 화면에서 읽지 않습니다.
+    let deviceState = 'unknown';
+    const DEVICE_TEXT = {
+      unknown: '확인하는 중', none: '승인 요청 전', pending: '승인 대기 중(관리자 승인 필요)',
+      approved: '승인된 등록 기기', revoked: '승인이 회수됨(다시 요청 필요)',
+    };
     let session = null;
     let editingId = null;
     let notesRequest = 0;
@@ -145,6 +174,14 @@
       });
       if (response.status === 401 && !retried && await refreshSession()) return api(path, { method, body }, true);
       if (response.status === 401) throw new Error('로그인 확인에 실패했습니다. 다시 로그인해 주세요.');
+      if (response.status === 403) {
+        const data = await response.json().catch(() => null);
+        if (data?.error === 'DEVICE_NOT_APPROVED') {
+          setDeviceState(data.deviceStatus);
+          throw new Error('이 기기가 승인되기 전에는 자료를 표시하지 않습니다.');
+        }
+        throw new Error('이 자료를 열 권한이 없습니다.');
+      }
       if (response.status === 404) throw new Error('메모를 찾을 수 없습니다. 이미 지워졌을 수 있습니다.');
       if (response.status === 400) throw new Error('제목(1~200자)과 내용(5000자 이하)을 확인해 주세요.');
       if (!response.ok) throw new Error('서버에서 요청을 처리하지 못했습니다.');
@@ -205,10 +242,55 @@
       return item;
     }
 
+    function setDeviceState(next) {
+      deviceState = Object.hasOwn(DEVICE_TEXT, next) ? next : 'unknown';
+      deviceStateBox.textContent = DEVICE_TEXT[deviceState];
+      deviceStateBox.dataset.state = deviceState;
+      deviceRequest.hidden = deviceState === 'pending' || deviceState === 'approved';
+      render();
+    }
+
+    async function checkDevice() {
+      deviceError.textContent = '';
+      if (!session?.accessToken) { setDeviceState('unknown'); return; }
+      try {
+        const data = await api('/api/device/status');
+        setDeviceState(data?.deviceStatus);
+      } catch (error) {
+        setDeviceState('unknown');
+        deviceError.textContent = error.message;
+      }
+    }
+
+    async function refreshDeviceAndNotes() {
+      await checkDevice();
+      await loadNotes();
+    }
+
+    deviceRequest.addEventListener('click', async () => {
+      deviceError.textContent = '';
+      deviceRequest.disabled = true;
+      try {
+        const data = await api('/api/device/request', { method: 'POST', body: { label: '이 브라우저' } });
+        setDeviceState(data?.deviceStatus);
+      } catch (error) {
+        deviceError.textContent = error.message;
+      } finally {
+        deviceRequest.disabled = false;
+      }
+      await loadNotes();
+    });
+    deviceRefresh.addEventListener('click', refreshDeviceAndNotes);
+
     async function loadNotes() {
       const request = ++notesRequest;
       if (!session?.accessToken) {
         showMessage('로그인하면 가상 메모를 볼 수 있습니다.');
+        return;
+      }
+      // 서버가 승인된 기기라고 알려 주기 전에는 자료를 요청하지도 표시하지도 않습니다(서버도 403으로 막음).
+      if (deviceState !== 'approved') {
+        showMessage('이 기기가 승인되기 전에는 자료를 표시하지 않습니다.');
         return;
       }
       try {
@@ -256,8 +338,9 @@
         : '로그인하지 않았습니다.';
       form.hidden = signedIn;
       logout.hidden = !signedIn;
-      editor.hidden = !signedIn;
-      if (!signedIn) resetEditor();
+      devicePanel.hidden = !signedIn;
+      editor.hidden = !(signedIn && deviceState === 'approved');
+      if (!signedIn || deviceState !== 'approved') resetEditor();
     }
 
     form.addEventListener('submit', async event => {
@@ -272,7 +355,7 @@
           errorBox.textContent = reason(data?.error);
         } else {
           saveSession(data);
-          await loadNotes();
+          await refreshDeviceAndNotes();
         }
       } catch {
         errorBox.textContent = '로그인 서버에 연결하지 못했습니다. 네트워크를 확인해 주세요.';
@@ -286,6 +369,7 @@
       errorBox.textContent = '';
       logout.disabled = true;
       const token = session?.accessToken;
+      deviceState = 'unknown';
       saveSession(null);
       await loadNotes();
       try {
@@ -302,7 +386,14 @@
       session = null;
     }
     render();
-    loadNotes();
+    refreshDeviceAndNotes();
+
+    // 11단계: 오프라인 안내용 서비스 워커. 자료와 API 응답은 저장하지 않고, 화면이 끊겼을 때 안내 페이지만 보여 줍니다.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    window.addEventListener('offline', () => showMessage('오프라인입니다. 연결되면 기기 승인과 자료를 다시 확인합니다.'));
+    window.addEventListener('online', refreshDeviceAndNotes);
   </script>
 </body>
 </html>

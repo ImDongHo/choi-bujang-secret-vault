@@ -1,5 +1,5 @@
 {
-  "step": 10,
+  "step": 11,
   "repoUrl": "https://github.com/ImDongHo/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-eta-five.vercel.app",
   "sampleMarker": "SAMPLE_NOTE_1",
@@ -21,7 +21,9 @@
     "POST /api/auth/login",
     "POST /api/auth/refresh",
     "POST /api/auth/logout",
-    "POST /api/restore/:id"
+    "POST /api/restore/:id",
+    "GET /api/device/status",
+    "POST /api/device/request"
   ],
   "originalApiUrl": "https://uibjvuqvkcgumanohtoi.supabase.co/rest/v1/notes",
   "restoreRoute": "POST /api/restore/:id"

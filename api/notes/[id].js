@@ -2,7 +2,7 @@
 // 3단계: 로그인 여부는 src/verify-login.mjs가 확인한 사용자 ID로 검사합니다.
 // 4단계: DB 조회·수정·삭제 조건에 owner_id = 검증된 사용자 ID를 항상 붙입니다.
 // URL·본문의 owner_id는 믿지 않으며, 남의 메모나 없는 메모는 똑같이 404로 거부합니다(존재 여부를 알리지 않음).
-import { claimsOtherOwner, isUuid, logDenied, notesTable, readNoteInput, rejectUnexpectedQuery, requireLogin, resourceId, toNote, unavailable } from '../../src/notes-api.mjs';
+import { claimsOtherOwner, isUuid, logDenied, notesTable, readNoteInput, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, toNote, unavailable } from '../../src/notes-api.mjs';
 
 const notFound = response => response.status(404).json({ error: 'NOTE_NOT_FOUND' });
 // 8단계: 남의 메모·없는 메모는 같은 404로 답하되, 서버 기록에는 자원 ID와 짧은 사유를 남깁니다.
@@ -12,6 +12,7 @@ export default async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'PUT', 'DELETE']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
+  if (!await requireApprovedDevice(ctx, request, response)) return; // 11단계: 승인된 기기만
 
   const rawId = Array.isArray(request.query?.id) ? request.query.id[0] : request.query?.id;
   if (!isUuid(rawId)) return notFound(response);

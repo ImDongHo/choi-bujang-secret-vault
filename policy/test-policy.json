@@ -58,6 +58,16 @@
         "route": "POST /restore/:id",
         "allow": "owner"
       }
+    ],
+    "device": [
+      {
+        "route": "GET /device/status",
+        "allow": "session"
+      },
+      {
+        "route": "POST /device/request",
+        "allow": "session"
+      }
     ]
   }
 }

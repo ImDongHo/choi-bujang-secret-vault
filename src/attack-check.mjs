@@ -220,11 +220,24 @@ async function stepTenChecks(app, config) {
   ]);
 }
 
+// 11단계: 기기 승인 경로를 토큰 없이 불러 거부되는지 봅니다. 승인 전 학생 토큰의 자료 요청은 토큰이 필요해 미실행으로 남깁니다.
+async function stepElevenChecks(app, config) {
+  return (await stepTenChecks(app, config)).concat([
+    { attackId: 'anonymous_device_status', expected: '토큰 없는 GET /api/device/status는 401',
+      observed: await sendRequest(new URL('/api/device/status', app)) },
+    { attackId: 'anonymous_device_request', expected: '토큰 없는 POST /api/device/request는 401',
+      observed: await sendRequest(new URL('/api/device/request', app), { method: 'POST', body: {} }) },
+    { attackId: 'unapproved_device_note_read', expected: '승인 전 기기의 학생 토큰 GET /api/notes는 403 DEVICE_NOT_APPROVED',
+      observed: '미실행: 학생 토큰이 필요해 화면에서 직접 확인' },
+  ]);
+}
+
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   const app = appUrl(config);
+  if (config.step === 11) return stepElevenChecks(app, config);
   if (config.step === 10) return stepTenChecks(app, config);
   if (config.step === 9) return stepNineChecks(app, config);
   if (config.step === 8) return stepEightChecks(app, config);

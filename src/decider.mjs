@@ -28,6 +28,9 @@ const ZONES = Object.freeze([
   { route: 'POST /auth/login', zone: 'session' },
   { route: 'POST /auth/refresh', zone: 'session' },
   { route: 'POST /auth/logout', zone: 'session' },
+  // 11단계: 기기 승인 요청·상태(승인 자체는 학생이 Supabase에서 함)
+  { route: 'GET /device/status', zone: 'session' },
+  { route: 'POST /device/request', zone: 'session' },
 ]);
 // :id 자리에는 자료 ID만 옵니다. 기능 이름은 같은 깊이에 두지 않으므로 ID로도 받지 않습니다.
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u;

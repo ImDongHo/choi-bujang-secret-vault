@@ -18,7 +18,19 @@
 
 로컬에서 가상 화면만 확인할 때는 `npm run build -- --local`을 사용합니다. 로컬 실행은 Vercel 배포나 심판 접수를 증명하지 않습니다. 저장소의 `src/attack-check.mjs`는 `npm run bundle` 때 실제 배포 주소로 요청을 보내 결과만 기록하는 학생 자기 점검입니다(심판 판정이 아님). 3단계에서는 토큰 없는 요청과 서명 없는 가짜 토큰 요청이 거부되는지 봅니다.
 
-## 현재 상태: 10단계 저장점
+## 현재 상태: 11단계 저장점
+
+- 11단계(나만의 접속 앱을 완성합니다). 따로 접속 프로그램을 만들거나 설치하지 않았고, 지금 배포 중인 자료실에 설치형 웹앱 설정과 기기 승인을 붙였습니다.
+- 설치형 웹앱(만들기 1): `public/manifest.webmanifest`(앱 이름 「최부장의 비밀창고」, 짧은 이름 「비밀창고」), `public/icon.svg`, 오프라인 안내 `public/offline.html`, 서비스 워커 `public/sw.js`(안내 페이지·아이콘만 저장, 메모·공지와 `/api` 응답은 저장하지 않음). 화면에 "설치나 승인 요청 버튼만으로는 기기 확인이 끝나지 않는다"고 적었습니다.
+- 기기 승인(만들기 2): 서비스 `notes`, 경로 `GET /api/device/status`, `POST /api/device/request`(`api/device/[action].js`, `allowedRoutes`에 추가).
+  - 승인 요청은 서버가 무작위 기기 번호를 만들어 **HttpOnly·Secure·SameSite=Strict 쿠키**(`bb_device`, Path=/api)로만 주고, 학습 DB `public.device_registrations`에는 '사용자 ID+기기 번호'의 SHA-256만 `pending`으로 저장합니다. 기기 번호는 화면 스크립트·localStorage·sessionStorage·IndexedDB·응답 본문·로그에 넣지 않습니다.
+  - 버튼은 `pending`만 만듭니다. 서버는 이 테이블에 UPDATE 권한이 없으며, `approved`로 바꾸는 것은 학생(관리자)이 Supabase SQL Editor에서 직접 합니다(`supabase/step11-device-registrations.sql` [2], 회수도 같은 곳).
+  - 메모·공지·복원 API(`/api/notes`, `/api/notes/:id`, `/api/notices`, `/api/notices/:id`, `/api/restore/:id`)는 학생 토큰이면 서버가 이 기기를 승인된 등록 기기로 확인한 뒤에만 자료를 주고, 아니면 403 `DEVICE_NOT_APPROVED`(`deviceStatus`: none·pending·revoked). 화면도 승인 전에는 자료 API를 부르지 않고 자료를 표시하지 않습니다. 심판 토큰은 반 엔진이 기기를 확인해 넘기므로(`deviceRegistered`) 기존 결과를 유지합니다.
+  - 배포 뒤에는 A·B 모두 각 브라우저에서 한 번 '이 기기 승인 요청' → Supabase에서 승인해야 기존 자료실이 열립니다.
+- 확인(로컬, 가짜 DB·가짜 토큰·Playwright, 2026-10-13): 쿠키 없음·승인 대기·회수·위조 쿠키·B가 A의 승인 쿠키 사용 → 403, 버튼을 다시 눌러도 pending 그대로, Supabase 승인 뒤 자기 메모 200, 무로그인 401, 없는 동작 404. 화면: 승인 전 자료 요청 없음·자료 표시 없음, 승인 뒤 기존 목록·추가 정상, 저장소에 기기 번호 없음. `decider:test`·`fixture:7`·`detect:test`·`policy:diff`·`test:r5`·`test:package`·xdr 시험 통과.
+- 10단계 결과(학생, 2026-10-13): 커밋 `638ab53`로 통과.
+
+### 10단계 기능 (유지)
 
 - 10단계(백업에서 자료실을 되살립니다). 운영 정책(판정기 `src/decider.mjs`, 자료 API `api/*`)은 정책 파일을 읽지 않으며, 정책 비교·복원은 `policy/` 아래 시험 정책만 다룹니다.
 - 정책 차이 보기(만들기 1): `npm run policy:diff`. `policy/safe-policy.json`(8단계 심판 통과 커밋 `b9d601a`의 구역 규칙을 옮긴 안전 사본, 버전 `step8-verified-b9d601a`)을 `policy/safe-policy.sha256`과 대조해 검증하고, 사본이 없거나 해시가 다르면 중단합니다. 통과하면 복원할 버전·현재 시험 정책 버전·변경 범위(되살림·되돌림·지움)·보존할 다른 서비스를 보여 줍니다.

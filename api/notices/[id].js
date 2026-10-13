@@ -2,7 +2,7 @@
 // 8단계: 공지 구역(읽기·수정)은 DB public.instructors에 저장된 강사만 허용합니다. 학생은 403입니다.
 // 화면 메뉴나 요청 본문의 role·isInstructor 같은 값은 믿지 않고, 검증된 사용자 ID로만 강사 여부를 대조합니다.
 // 거부할 때는 자원 ID와 짧은 사유만 기록합니다.
-import { isInstructor, isUuid, logDenied, readNoteInput, rejectUnexpectedQuery, requireLogin, resourceId, restTable, toNote, unavailable } from '../../src/notes-api.mjs';
+import { isInstructor, isUuid, logDenied, readNoteInput, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, restTable, toNote, unavailable } from '../../src/notes-api.mjs';
 
 const notFound = response => response.status(404).json({ error: 'NOTICE_NOT_FOUND' });
 
@@ -10,6 +10,7 @@ export default async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['GET', 'PUT']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
+  if (!await requireApprovedDevice(ctx, request, response)) return; // 11단계: 승인된 기기만
 
   const rawId = Array.isArray(request.query?.id) ? request.query.id[0] : request.query?.id;
   if (!isUuid(rawId)) return notFound(response);

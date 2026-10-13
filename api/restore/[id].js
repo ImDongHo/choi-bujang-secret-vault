@@ -4,7 +4,7 @@
 // - 그 한 건만 넣거나 고칩니다. 다른 메모, 사본, 감사 기록은 바꾸지 않고 감사 기록에 한 줄을 추가합니다.
 // - 메모 내용은 응답·로그에 넣지 않습니다. 응답은 {id, action, contentSha256}입니다.
 // - 8단계 규칙에 맞춰 /api/notes/:id와 같은 깊이에 기능 경로를 두지 않고 별도 경로를 씁니다.
-import { contentHash, isUuid, logDenied, notesTable, rejectUnexpectedQuery, requireLogin, resourceId, restTable, unavailable } from '../../src/notes-api.mjs';
+import { contentHash, isUuid, logDenied, notesTable, rejectUnexpectedQuery, requireApprovedDevice, requireLogin, resourceId, restTable, unavailable } from '../../src/notes-api.mjs';
 
 const notFound = response => response.status(404).json({ error: 'BACKUP_NOT_FOUND' });
 
@@ -20,6 +20,7 @@ export default async function handler(request, response) {
   const ctx = await requireLogin(request, response, ['POST']);
   if (!ctx) return;
   if (rejectUnexpectedQuery(request, response, ['id'])) return;
+  if (!await requireApprovedDevice(ctx, request, response)) return; // 11단계: 승인된 기기만
 
   const rawId = request.query?.id;
   if (!isUuid(rawId)) return notFound(response);

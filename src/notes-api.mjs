@@ -3,7 +3,7 @@
 // 브라우저가 보낸 userId·role·owner_id는 읽지 않습니다.
 // SUPABASE_URL, SUPABASE_SECRET_KEY는 Vercel 환경변수에서만 읽고 응답·로그에 넣지 않습니다.
 // 4단계: 모든 읽기·추가·수정·삭제를 검증된 사용자 ID와 DB의 owner_id가 같을 때만 허용합니다.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from './verify-login.mjs';
 
@@ -70,7 +70,7 @@ export async function requireLogin(request, response, allow) {
     response.status(401).json({ error: 'LOGIN_REQUIRED' });
     return null;
   }
-  return { userId: login.userId, url, key };
+  return { userId: login.userId, kind: login.kind, url, key };
 }
 
 // 요청 본문에서 title·body만 꺼내 검사합니다. 잘못되면 null.
@@ -99,7 +99,7 @@ export function notesTable(ctx, options) {
   return restTable(ctx, 'notes', options);
 }
 
-const TABLES = new Set(['notes', 'notices', 'instructors', 'notes_backup', 'notes_restore_audit']);
+const TABLES = new Set(['notes', 'notices', 'instructors', 'notes_backup', 'notes_restore_audit', 'device_registrations']);
 export async function restTable(ctx, table, { method = 'GET', query = {}, body, prefer } = {}) {
   if (!TABLES.has(table)) throw new TypeError('unknown_table');
   const endpoint = new URL(`/rest/v1/${table}`, ctx.url);
@@ -130,6 +130,52 @@ export async function isInstructor(ctx) {
 // 10단계: 메모 내용 해시(UTF-8 SHA-256, 16진수). 학습 DB의 encode(sha256(convert_to(content,'UTF8')),'hex')와 같은 값입니다.
 export function contentHash(text) {
   return createHash('sha256').update(String(text), 'utf8').digest('hex');
+}
+
+// 11단계: 기기 승인. 기기 번호는 서버가 만들어 HttpOnly 쿠키로만 줍니다(화면 스크립트가 읽을 수 없음).
+// DB에는 '사용자 ID + 기기 번호'의 SHA-256만 저장하며, 승인(approved)은 학생이 Supabase에서 직접 바꿉니다.
+export const DEVICE_COOKIE = 'bb_device';
+const DEVICE_ID = /^[A-Za-z0-9_-]{43}$/u;
+
+export function readDeviceCookie(request) {
+  const header = typeof request.headers?.cookie === 'string' ? request.headers.cookie : '';
+  for (const part of header.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === DEVICE_COOKIE) {
+      const value = rest.join('=');
+      return DEVICE_ID.test(value) ? value : null;
+    }
+  }
+  return null;
+}
+
+export const newDeviceId = () => randomBytes(32).toString('base64url');
+export const deviceHash = (userId, deviceId) => createHash('sha256').update(`${userId}:${deviceId}`, 'utf8').digest('hex');
+export const deviceCookieHeader = deviceId =>
+  `${DEVICE_COOKIE}=${deviceId}; Path=/api; HttpOnly; Secure; SameSite=Strict; Max-Age=7776000`;
+
+// 이 브라우저(쿠키)의 기기가 검증된 사용자에게 어떤 상태인지: none·pending·approved·revoked
+export async function deviceStatus(ctx, request) {
+  const deviceId = readDeviceCookie(request);
+  if (!deviceId) return { status: 'none', deviceId: null };
+  const result = await restTable(ctx, 'device_registrations', { query: {
+    select: 'status,label', device_hash: `eq.${deviceHash(ctx.userId, deviceId)}`, owner_id: `eq.${ctx.userId}`, limit: '1',
+  } });
+  if (!result.ok || !Array.isArray(result.data)) throw new Error('device_lookup_failed');
+  return result.data.length
+    ? { status: result.data[0].status, label: result.data[0].label, deviceId }
+    : { status: 'none', deviceId };
+}
+
+// 학생 토큰은 승인된 기기에서만 보호 자료를 엽니다. 심판 토큰은 반 엔진이 기기를 이미 확인해 넘기므로(deviceRegistered) 그대로 둡니다.
+export async function requireApprovedDevice(ctx, request, response) {
+  if (ctx.kind !== 'student') return true;
+  let device;
+  try { device = await deviceStatus(ctx, request); } catch { unavailable(response); return false; }
+  if (device.status === 'approved') return true;
+  logDenied('device', `device_${device.status}`);
+  response.status(403).json({ error: 'DEVICE_NOT_APPROVED', deviceStatus: device.status });
+  return false;
 }
 
 export function unavailable(response) {
