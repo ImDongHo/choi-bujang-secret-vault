@@ -280,20 +280,22 @@ function distinctOptions(events, pick, toText) {
 }
 
 function createEventsView() {
-  const ui = { filters: { kind: ALL, app: ALL, access: ALL }, selectedId: null, dataKey: null };
+  // 화면 안 조작(필터 변경·상세 버튼)은 아래 draw 만 다시 그리고 이 상태를 이어 씁니다.
+  const ui = { filters: { kind: ALL, app: ALL, access: ALL }, selectedId: null };
   const reset = () => {
     ui.filters = { kind: ALL, app: ALL, access: ALL };
     ui.selectedId = null;
-    ui.dataKey = null;
   };
 
+  // 제공 화면이 renderEvents 를 부르는 것은 새 자료 수신입니다(loading·ok·error 모두).
+  // id·시각이 같아도 근거·규칙·상태가 바뀌었을 수 있으므로, 받을 때마다 이전 목록·필터·상세 선택을 모두 지우고 새로 그립니다.
   return function renderEventsView({ status, mode, data, error } = {}) {
+    reset();
     const root = textNode('div', undefined, { 'data-testid': 'student-events-view', 'data-state': status ?? 'unknown' });
     const notice = modeNotice(mode ?? null);
     if (notice) root.append(notice);
 
     if (status !== 'ok') {
-      reset();
       if (status === 'loading') root.append(textNode('p', '기록 불러오는 중', { role: 'status', 'data-events': 'loading' }));
       else if (status === 'error') {
         const message = isText(error?.message) ? error.message : '서버 메시지 없음';
@@ -304,18 +306,12 @@ function createEventsView() {
       return root;
     }
     if (!Array.isArray(data)) {
-      reset();
       root.append(textNode('p', '확인 불가: 기록 목록 형식이 올바르지 않습니다.', { role: 'alert', 'data-events': 'unverified' }));
       return root;
     }
 
     // 복사 후 최신순 정렬(원본 data 는 그대로 둡니다).
     const events = data.filter((e) => e && typeof e === 'object').slice().sort((a, b) => timeValue(b.at) - timeValue(a.at));
-    const dataKey = JSON.stringify(events.map((e) => [e.id, e.at]));
-    if (dataKey !== ui.dataKey) {
-      reset();
-      ui.dataKey = dataKey;
-    }
 
     root.append(textNode('p', '범위: 현재 등록 정보와 맞춰 본 본인 최근 기록(최대 40건). 전체 직원 이력·실시간 전체 탐지가 아닙니다.', { 'data-field': 'scope' }));
     if (events.length === 0) {
