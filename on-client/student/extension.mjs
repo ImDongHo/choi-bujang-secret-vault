@@ -1,8 +1,116 @@
 // 이 파일은 학생이 같은 프로젝트에서 이어서 구현합니다.
 // 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
+
+// 13단계: 로그인 사용자·현재 기기·세션 표시(renderIdentity).
+// - 입력 { me, devices, sessions } 는 각각 { status, mode, data?, error? } 입니다.
+// - 호출될 때마다 새 DOM을 만들어 돌려줍니다. 제공 화면이 학생 칸을 통째로 바꾸므로 이전 값이 남지 않습니다.
+// - 오류일 때는 사용자·기기·세션 값을 그리지 않고, 서버 message만 글자로 보여 줍니다.
+// - 받은 값이 비어 있거나 모르는 상태값이면 지어내지 않고 「확인 불가」로 표시합니다.
+// - document.createElement 와 textContent 만 씁니다(HTML 문자열은 해석하지 않음).
+// - 기기 보안 상태 표시는 악성코드 검사나 치료 기능이 아닙니다.
+const MODE_TEXT = { demo: '예제 자료', disconnected: '연결 없음', unknown: '확인 불가' };
+const DEVICE_STATUS_TEXT = { compliant: '보안 기준 충족', noncompliant: '보안 기준 미충족', unknown: '확인 불가' };
+const SESSION_STATUS_TEXT = { active: '활성', expired: '만료', revoked: '철회됨', unknown: '확인 불가' };
+// 정상으로 보여도 되는 상태는 이 둘뿐입니다. 나머지(미충족·만료·철회됨·확인 불가)는 글자로 「주의」를 붙입니다.
+const NORMAL_STATUS = { device: 'compliant', session: 'active' };
+
+function textNode(tag, text, attrs = {}) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  return node;
+}
+
+const isText = (value) => typeof value === 'string' && value.trim() !== '';
+const shown = (value) => (isText(value) ? value : '확인 불가');
+
+// 데이터 출처 안내: connected 가 아니면 어느 상태(loading·ok·error)에서도 함께 보여 줍니다.
+function modeNotice(mode) {
+  if (mode === 'connected') return null;
+  const text = MODE_TEXT[mode] ?? MODE_TEXT.unknown;
+  return textNode('p', `데이터 출처: ${text}`, { 'data-mode': mode ?? 'unknown', class: 'student-mode' });
+}
+
+// 상태값 한 개를 「한국어 (원래 값)」으로 보여 주고, 정상이 아니면 글자로 주의를 붙입니다.
+function statusLine(label, kind, status) {
+  const table = kind === 'device' ? DEVICE_STATUS_TEXT : SESSION_STATUS_TEXT;
+  const known = Object.hasOwn(table, status);
+  const value = known ? status : 'unknown';
+  const normal = value === NORMAL_STATUS[kind];
+  const text = `${label}: ${table[value]} (${known ? status : '알 수 없는 값'})${normal ? '' : ' ⚠ 주의'}`;
+  return textNode('p', text, { 'data-status': value, class: normal ? 'student-status-normal' : 'student-status-warning' });
+}
+
+// loading·error·기타 상태를 글자로 보여 줍니다. ok 가 아니면 이전 값은 그리지 않습니다.
+function notOkLine(resource) {
+  if (resource?.status === 'loading') return textNode('p', '불러오는 중', { 'data-state': 'loading' });
+  if (resource?.status === 'error') {
+    const message = isText(resource.error?.message) ? resource.error.message : '서버 메시지 없음';
+    const prefix = resource.error?.code === 'CONTRACT_MISMATCH' ? '확인 불가' : '연결 실패';
+    return textNode('p', `${prefix}: ${message}`, { 'data-state': 'error', role: 'alert' });
+  }
+  return textNode('p', '확인 불가', { 'data-state': 'unknown' });
+}
+
+function section(title, resource, fillOk) {
+  const box = textNode('section', undefined, { 'data-resource': title });
+  box.append(textNode('h3', title));
+  const notice = modeNotice(resource?.mode ?? null);
+  if (notice) box.append(notice);
+  if (resource?.status === 'ok') fillOk(box, resource.data);
+  else box.append(notOkLine(resource));
+  return box;
+}
+
+function fillMe(box, data) {
+  const user = data?.user;
+  const device = data?.device;
+  const session = data?.session;
+  if (!user || !device || !session) {
+    box.append(textNode('p', '확인 불가: 로그인 정보 형식이 올바르지 않습니다.', { 'data-state': 'unknown' }));
+    return;
+  }
+  box.append(
+    textNode('p', `사용자: ${shown(user.label)} (ID ${shown(user.id)})`, { 'data-field': 'user' }),
+    textNode('p', `현재 기기: ${shown(device.label)} (ID ${shown(device.id)})`, { 'data-field': 'device' }),
+    statusLine('기기 보안 상태', 'device', device.status),
+    textNode('p', `현재 세션: ID ${shown(session.id)}`, { 'data-field': 'session' }),
+    statusLine('세션 상태', 'session', session.status),
+  );
+}
+
+function fillList(kind) {
+  return (box, data) => {
+    if (!Array.isArray(data)) {
+      box.append(textNode('p', '확인 불가: 목록 형식이 올바르지 않습니다.', { 'data-state': 'unknown' }));
+      return;
+    }
+    if (data.length === 0) {
+      box.append(textNode('p', kind === 'device' ? '등록된 기기 없음' : '세션 없음', { 'data-state': 'empty' }));
+      return;
+    }
+    const list = textNode('ul');
+    for (const entry of data) {
+      const item = textNode('li');
+      const name = kind === 'device' ? `${shown(entry?.label)} (ID ${shown(entry?.id)})` : `세션 ID ${shown(entry?.id)}`;
+      item.append(textNode('span', name), statusLine(kind === 'device' ? '보안 상태' : '상태', kind, entry?.status));
+      list.append(item);
+    }
+    box.append(list);
+  };
+}
+
 export function createStudentView() {
   return {
-    renderIdentity() { return '학생 구현 대기: 실제 로그인·기기·세션 정보를 연결하세요.'; },
+    renderIdentity({ me, devices, sessions } = {}) {
+      const root = textNode('div', undefined, { 'data-testid': 'student-identity-view' });
+      root.append(
+        section('내 계정·현재 기기·세션', me, fillMe),
+        section('내 기기 목록', devices, fillList('device')),
+        section('내 세션 목록', sessions, fillList('session')),
+      );
+      return root;
+    },
     renderDecision() { return '학생 구현 대기: 서버의 판정과 이유를 연결하세요.'; },
     renderEvents() { return '학생 구현 대기: 본인 접속·XDR 기록을 연결하세요.'; },
     renderStatus() { return '학생 구현 대기: 기기·세션·알림과 연결 점검 상태를 구분하세요.'; },
