@@ -5,3 +5,5 @@ bundle-notes.json
 node_modules/
 public/aleph.json
 *.local.sql
+# 13단계 시작 틀의 비밀 없는 설정 예시는 함께 커밋합니다.
+!on-client/.env.example
