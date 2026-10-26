@@ -2,6 +2,16 @@
 
 이 저장소는 1단계에서 학생 본인이 GitHub 저장소와 Vercel 배포를 만드는 출발점입니다. 포함된 메모 네 건은 가상 자료입니다. 실제 학생 자료, 토큰, 비밀키를 넣지 마세요.
 
+## 4~6차 보안 Agent 「창고지기」(on-client, 13~22단계)
+
+- **목적**: 직원이 자기 로그인 상태, 업무 앱 접속 판정, 본인 접속 기록·XDR 경보, 기기·세션, 설치 패키지 취약점 조회, AI 설명, 조치 상태를 한 화면에서 확인하는 로컬 보안 앱입니다.
+- **구성**: 브라우저(`on-client/public/`, 학생 표시 `on-client/student/extension.mjs`) → 로컬 앱 서버(`on-client/src/server.mjs`, `http://127.0.0.1:5189`) → 접근 제어·XDR 시스템(`src/engine.mjs`, `student/engine-adapter.mjs`) / AI 게이트웨이(`src/ai/`, `vendor/clco-http.mjs`) / OSV(`src/vulnerabilities/`).
+- **기능(학생 작성)**: `renderIdentity`·`renderDecision`·`renderEvents`·`renderStatus`·`renderAiConnection`·`renderExplanation`·`renderAction`·`renderVulnerabilities`(13~20단계). 서버·화면 뼈대는 제공 시작 틀 `alekov-starter 0.2.11` 그대로입니다.
+- **지원 환경과 버전**: Node.js 수업 기준 24.19.0(`on-client/package.json` engines), 외부 npm 의존성 없음. 학생이 실제 실행해 확인한 버전은 v22.22.0 이며 Windows PowerShell 실행은 미확인입니다.
+- **실행**: `on-client` 폴더에서 `npm start`(기본, 엔진 미연결) 또는 `npm run demo`(예제 자료) → 브라우저 `http://127.0.0.1:5189/`. 제공 도구 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1` 도 같은 서버를 켭니다.
+- 실행 절차·구성도(Mermaid·글)·제공/학생 경계·오류별 확인 순서·미확인 목록: **[on-client/docs/STUDENT_RUNBOOK.md](on-client/docs/STUDENT_RUNBOOK.md)**
+- 키·토큰·비밀번호는 이 저장소에 넣지 않습니다(`.env`, `.env.*` 는 `.gitignore` 로 제외, `on-client/.env.example` 은 비밀 없는 견본).
+
 ## 학생이 하는 일: 세 걸음
 
 1. GitHub 계정을 만듭니다.
