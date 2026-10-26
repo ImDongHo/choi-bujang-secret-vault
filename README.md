@@ -10,6 +10,7 @@
 - **지원 환경과 버전**: Node.js 수업 기준 24.19.0(`on-client/package.json` engines), 외부 npm 의존성 없음. 학생이 실제 실행해 확인한 버전은 v22.22.0 이며 Windows PowerShell 실행은 미확인입니다.
 - **실행**: `on-client` 폴더에서 `npm start`(기본, 엔진 미연결) 또는 `npm run demo`(예제 자료) → 브라우저 `http://127.0.0.1:5189/`. 제공 도구 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1` 도 같은 서버를 켭니다.
 - 실행 절차·구성도(Mermaid·글)·제공/학생 경계·오류별 확인 순서·미확인 목록: **[on-client/docs/STUDENT_RUNBOOK.md](on-client/docs/STUDENT_RUNBOOK.md)**
+- 새 환경 재현 기록·버전(v0.9.0 검증 중)·단계별 결과·데이터 보존 계획: **[on-client/docs/STUDENT_RELEASE_RECORD.md](on-client/docs/STUDENT_RELEASE_RECORD.md)**
 - 키·토큰·비밀번호는 이 저장소에 넣지 않습니다(`.env`, `.env.*` 는 `.gitignore` 로 제외, `on-client/.env.example` 은 비밀 없는 견본).
 
 ## 학생이 하는 일: 세 걸음
