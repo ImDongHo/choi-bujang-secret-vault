@@ -16,7 +16,7 @@
 
 ```text
 git diff --stat 8ca051123a0a7ec3e94a06d6b9d744a0b4688fbd HEAD
-→ on-client/docs/STUDENT_RELEASE_RECORD.md, README.md(문서 링크 1줄) 만 나와야 합니다.
+→ on-client/docs/STUDENT_RELEASE_RECORD.md, on-client/docs/STUDENT_RUNBOOK.md(경로 예시를 자리표시자로 바꾼 1줄), README.md(문서 링크 1줄) 만 나와야 합니다. 코드·실행 파일·설정 견본은 같습니다.
 ```
 
 ## 2. 기록 구분
@@ -89,31 +89,83 @@ git diff --stat 8ca051123a0a7ec3e94a06d6b9d744a0b4688fbd HEAD
 | Node 24.19.0 실행 | 미확인 |
 | 학생 Windows PC 새 폴더 재현 | 미확인(7장 절차로 진행 가능) |
 
-## 7. 학생 PC에서 같은 재현 하기 (절차, 미실행)
+## 7. 다른 PC에서 같은 재현 하기 (절차, 학생 PC 미실행)
 
-원래 폴더(`C:\Users\Administrator\Desktop\k뉴딜\방어전\choi-bujang-secret-vault`)는 그대로 두고 새 폴더에서 진행합니다. 인증·설정 파일은 복사하지 않습니다.
+특정 사용자 경로에 의존하지 않도록, **원래 작업 폴더 밖의 아무 폴더**에서 시작합니다. `<…>` 는 각자 값으로 바꿔 넣는 자리표시자입니다. 원래 작업 폴더는 그대로 두고, 인증·설정 파일(`.env`, 보관함, 인증서)은 복사하지 않습니다.
+
+1. 파일 탐색기에서 원래 저장소 폴더가 **아닌** 상위 폴더(예: 바탕 화면이나 문서 폴더)를 엽니다.
+2. 주소 표시줄에 `powershell` 을 입력해 그 위치에서 PowerShell 을 엽니다. 아래 명령은 모두 **현재 위치 기준 상대 경로**입니다.
 
 ```powershell
-mkdir "C:\Users\Administrator\Desktop\k뉴딜\방어전\repro22"
-cd "C:\Users\Administrator\Desktop\k뉴딜\방어전\repro22"
+mkdir repro22
+cd repro22
 git clone https://github.com/ImDongHo/choi-bujang-secret-vault.git
 cd choi-bujang-secret-vault
 git checkout <제출할 40자리 커밋>
+git log --oneline -1
 cd on-client
 node --version
 npm run check
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 ```
-브라우저 `http://127.0.0.1:5189/` 확인 → 창에서 `Ctrl+C` 로 종료 → 같은 명령으로 재실행.
+
+3. 브라우저 `http://127.0.0.1:5189/` 를 확인합니다 → 창에서 `Ctrl+C` 로 종료 → 같은 마지막 명령으로 재실행합니다.
+4. 끝나면 `cd ..` 후 `git status --short` 가 아무것도 출력하지 않는지 봅니다(앱이 저장소에 파일을 쓰지 않았는지 확인).
+5. 새 폴더 `repro22` 는 확인이 끝나면 지워도 됩니다. 원래 작업 폴더에는 영향이 없습니다.
 
 ## 8. 데이터 보존 계획
 
-| 데이터 | 어디에 있나 | 보존·백업 | 복원 | 제한 |
-|---|---|---|---|---|
-| 학생 코드·문서(`student/extension.mjs`, `docs/STUDENT_*.md`, `README.md`) | Git 저장소 | GitHub 원격 `main` 이 백업. 단계마다 커밋해 이력 보존 | `git clone` 뒤 `git checkout <커밋>` (4장 1번에서 실제로 복원해 봄) | 커밋하지 않은 변경은 백업되지 않음 |
-| 실행 중 화면 상태(선택한 기록·필터·조회 결과·확인 티켓) | 브라우저 메모리 | 보존하지 않음(의도). 「다시 불러오기」로 서버에서 다시 받음 | 다시 불러오기·다시 조회 | 새로 고침·종료하면 사라짐 |
-| 로컬 디스크 앱 데이터(기본·예제 실행) | 없음 | 해당 없음 | 해당 없음 | 4장 12번: 실행 뒤 저장소 변경 0줄 |
-| 조치 기록 SQLite(`alekov_action_intents` 등) | 담당자가 지정한 기존 DB 파일(`--alekov-actions-config` 사용 시에만) | 담당자(호스트) 책임. 저장소에 넣지 않음 | 담당자 절차 | 학생이 만들거나 복사하지 않음. 이번 재현에서는 사용 안 함 |
-| AI 앱 자격 보관함 | 담당자가 구성한 Windows 보관 경로(신뢰된 호스트) | 저장소·문서에 넣지 않음 | 담당자에게 재발급 요청 | 키를 복사·백업하지 않음 |
-| 설정값(`.env`) | 학생 PC 로컬 | `.gitignore` 로 제외. 견본은 `on-client/.env.example`(비밀 없음) | 견본을 보고 담당자 안내 값으로 다시 작성 | 비밀값은 백업하지 않음 |
-| 1~12단계 학습 DB(Supabase) | Supabase 관리 DB | 스키마·정책 SQL 은 저장소 `supabase/*.sql` 로 보존 | SQL 을 순서대로 적용 | 학습용 가상 자료만 있음. 데이터 행 자체의 백업은 Supabase 관리 범위 |
+### 8-1. 데이터 목록과 책임
+
+| 데이터 | 어디에 있나 | 책임 | 지금 상태 |
+|---|---|---|---|
+| 학생 코드·문서 | Git 저장소(GitHub `main`) | 학생 | 단계마다 커밋·푸시로 보존 중 |
+| 실행 중 화면 상태(선택·필터·조회 결과·확인 티켓) | 브라우저 메모리 | 해당 없음 | 의도적으로 저장하지 않음. 새로 고침·종료 시 사라지고 「다시 불러오기」로 다시 받음 |
+| 기본·예제 실행의 로컬 데이터 | 없음 | 해당 없음 | 4장 12번: 실행 뒤 저장소 변경 0줄 |
+| 조치 기록 SQLite(`alekov_action_intents`·`alekov_action_state`·`alekov_action_audit`) | 담당자가 조치 설정 파일(`--alekov-actions-config`)의 `databasePath` 로 지정한 **기존** DB 파일 | 파일 소유·보관은 담당자(호스트). 학생은 담당자 승인 아래 8-3 절차로 사본만 만듦 | 이 프로젝트에서는 조치 연결을 켜지 않아 **파일 없음·백업 대상 없음** |
+| AI 앱 자격 보관함 | 담당자가 구성한 Windows 보관 경로 | 담당자 | 백업·복사 대상 아님. 잃으면 담당자에게 재발급 요청 |
+| 설정값 `.env` | 각자 PC 로컬(`.gitignore` 제외) | 학생 | 비밀값은 백업하지 않음. `on-client/.env.example` 견본과 담당자 안내로 다시 작성 |
+| 1~12단계 학습 DB(Supabase) 표 `notes`·`notices`·`instructors`·`notes_backup`·`notes_restore_audit`·`device_registrations`·`ops_events` | Supabase 프로젝트 | 학생(학습용 가상 자료) | 구조(스키마·정책)는 `supabase/*.sql` 로 저장소에 보존 |
+
+### 8-2. Git(학생 코드·문서) 백업과 복원
+- 백업: 작업 후 `git add` → `git commit` → `git push`. 커밋하지 않은 변경은 백업되지 않습니다.
+- 복원: 7장처럼 새 폴더에 `git clone` 후 `git checkout <커밋>`. 4장 1번에서 실제로 복원해 실행까지 확인했습니다.
+- 제한: `.env`·비밀값·`bundle-notes.json`·`artifacts/`·`*.local.sql` 은 저장소에 없으므로 복원되지 않습니다(의도).
+
+### 8-3. 조치 기록 SQLite 백업과 복원 (담당자 승인 시, 미실행)
+1. **백업**
+   1. 앱 서버 창에서 `Ctrl+C` 로 서버를 멈춥니다(기록 중 복사 방지).
+   2. 담당자에게 받은 조치 설정 파일의 `databasePath` 값을 확인합니다(`<조치 DB 경로>`).
+   3. 저장소 **밖** 백업 폴더에 날짜를 붙여 복사합니다.
+      `Copy-Item -LiteralPath "<조치 DB 경로>" -Destination "<백업 폴더>\alekov-actions-<YYYYMMDD>.sqlite"`
+   4. 같은 폴더에 `<조치 DB 경로>-wal`, `<조치 DB 경로>-shm` 파일이 있으면 같은 이름 규칙으로 함께 복사합니다.
+2. **복원**
+   1. 서버를 멈춥니다.
+   2. 지금 파일을 먼저 따로 복사해 둡니다(되돌릴 수 있게).
+   3. 백업본을 원래 `<조치 DB 경로>` 로 복사합니다.
+   4. 같은 설정으로 서버를 다시 켭니다.
+   5. 알고 있는 요청에 대해 「원천 결과만 재조회」를 눌러 상태를 확인합니다. **다시 집행하지 않습니다.**
+3. **제한**
+   - 표에는 지우기·수정 금지 트리거가 있어 행을 직접 고치거나 지우지 않습니다.
+   - 옛 백업으로 복원하면 그 뒤의 요청·감사 기록이 빠집니다. 연동 시스템(원천)의 실제 효과와 다를 수 있으므로 결과는 반드시 재조회로 확인합니다.
+   - 서버는 새 DB 를 만들지 않으므로 파일을 지운 상태로는 시작되지 않습니다.
+   - DB 파일과 백업본은 저장소에 커밋하지 않습니다.
+
+### 8-4. Supabase(1~12단계 학습 DB) 백업과 복원 (미실행)
+1. **백업(행 데이터)**
+   1. Supabase 대시보드 → 해당 프로젝트 → Table Editor 에서 표를 하나씩 엽니다.
+   2. 표 메뉴의 CSV 내보내기로 저장소 밖 백업 폴더에 `<표이름>-<YYYYMMDD>.csv` 로 저장합니다.
+   3. 표 7개를 모두 반복합니다.
+2. **백업(구조)**: 저장소의 `supabase/*.sql`(표·정책·권한)이 구조 백업입니다.
+3. **복원**
+   1. 빈 프로젝트라면 SQL Editor 에서 아래 순서로 적용합니다.
+      `step3-notes-crud.sql` → `step4-notes-rls.sql` → `step4-owner-seed.sql` → `step5-revoke-direct.sql` → `step8-notices.sql` → `step10-notes-backup.sql` → `step11-device-registrations.sql` → `step12-ops-events.sql`
+   2. Table Editor 에서 각 표에 CSV 를 가져옵니다. 표 사이 외래 키는 없지만, 내용 확인이 쉽도록 `notes` → `notes_backup` → `notes_restore_audit` → 나머지 순서로 넣습니다.
+4. **앱 안 복구**: 메모 한 건의 내용 복구는 10단계 기능(`public.notes_backup` 사본, 복원 감사 기록)으로 할 수 있습니다.
+5. **제한**
+   - CSV 에는 가상 메모 본문이 들어가므로 저장소·제출 묶음에 넣지 않습니다.
+   - `ops_events` 는 추가 전용(수정·삭제 권한 없음)이라 가져오기는 대시보드 소유자 권한으로만 됩니다.
+   - `owner_id`·`restored_by` 같은 값은 Supabase 인증 사용자 ID 입니다. 같은 프로젝트에 복원할 때만 소유자가 맞고, 새 프로젝트에서는 사용자 계정이 없어 맞지 않습니다(계정은 CSV 로 옮기지 않음).
+   - `notes_restore_audit.audit_id` 는 자동 생성 열(`generated always`)이라 CSV 가져오기에서 이 열은 빼고 넣어야 하며, 번호는 새로 매겨집니다.
+   - 대시보드 자동 백업(Database → Backups) 제공 여부는 요금제에 따라 다르며, 이 프로젝트에서는 확인하지 않았습니다(미확인).
+   - DB 비밀번호·서비스 키는 문서·저장소에 적지 않습니다.

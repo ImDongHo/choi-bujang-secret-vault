@@ -45,7 +45,7 @@ choi-bujang-secret-vault/          ← Git 최상위(커밋·제출 기준)
 
 ### 3-1. PowerShell 을 여는 위치
 1. 파일 탐색기에서 `…\choi-bujang-secret-vault\on-client` 폴더를 엽니다.
-   - 학생 PC 예: `C:\Users\Administrator\Desktop\k뉴딜\방어전\choi-bujang-secret-vault\on-client`
+   - 예: `<저장소를 받은 상위 폴더>\choi-bujang-secret-vault\on-client` (`<…>` 는 각자 PC 의 실제 폴더로 바꿔 넣습니다)
 2. 주소 표시줄에 `powershell` 을 입력하고 Enter 를 누릅니다.
 
 ### 3-2. 실행 명령 (`on-client` 폴더에서)
